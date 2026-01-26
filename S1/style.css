@@ -1,0 +1,21 @@
+    /* Make the body and html cover the whole screen */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden; /* Prevent scrollbars */
+    }
+
+    /* Make the game wrapper and game div fill the screen */
+    .game-wrapper, #game {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Optional: remove any padding/margin in game wrapper */
+    .game-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
