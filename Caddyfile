@@ -1,17 +1,18 @@
 :{$PORT}
 
 root * .
-
 file_server
 encode gzip zstd
 
-# Default to binary, no persistent cache
-header * Content-Type application/octet-stream
-header * Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+# Force emulator-related files to never cache
+@emulator_files { path *.wasm *.data *.mem *.symbols.json *.zip *.7z *.cue *.iso *.chd }
+header @emulator_files Content-Type application/octet-stream
+header @emulator_files Cache-Control "no-store, no-cache, must-revalidate, max-age=0, private"
 
-# Exceptions for HTML/JS/CSS/WASM
-@text_files { path *.html *.js *.css *.wasm }
-header @text_files Content-Type "text/html; charset=utf-8"
+# HTML/JS/CSS for emulator loader
+@text_files { path *.html *.js *.css }
+header @text_files Content-Type text/html; charset=utf-8
+header @text_files Cache-Control "no-store, no-cache, must-revalidate, max-age=0, private"
 
 # Security headers
 header {
