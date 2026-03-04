@@ -5,7 +5,7 @@ root * .
 file_server
 encode gzip zstd {
     match {
-        not path *.wasm
+        not path *.wasm *.zip *.bin *.cue *.iso *.chd
     }
 }
 
