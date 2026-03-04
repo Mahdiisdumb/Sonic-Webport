@@ -3,7 +3,11 @@
 root * .
 
 file_server
-encode gzip zstd
+encode gzip zstd {
+    match {
+        not path *.wasm
+    }
+}
 
 # Serve WASM files with correct MIME
 @wasm_files { path *.wasm }
