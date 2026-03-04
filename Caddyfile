@@ -5,13 +5,13 @@ root * .
 file_server
 encode gzip zstd
 
+# Treat everything as binary by default
+header * Content-Type application/octet-stream
+header * Cache-Control "no-store, must-revalidate"
+
 # Serve WASM files with correct MIME
 @wasm_files { path *.wasm }
 header @wasm_files Content-Type application/wasm
-
-# Optional: other binary files
-@binary_files { path *.data *.mem *.symbols.json *.bin *.cue *.iso *.chd }
-header @binary_files Content-Type application/octet-stream
 
 # Security headers
 header {
