@@ -5,13 +5,26 @@ root * .
 file_server
 encode gzip zstd
 
-# Treat everything as binary by default
+# Default: treat everything as binary and prevent caching
 header * Content-Type application/octet-stream
-header * Cache-Control "no-store, must-revalidate"
+header * Cache-Control "no-store, max-age=0, must-revalidate"
 
-# Serve WASM files with correct MIME
-@wasm_files { path *.wasm }
-header @wasm_files Content-Type application/wasm
+# Exceptions: let the browser interpret these correctly
+@html { path *.html }
+header @html Content-Type text/html
+
+@js { path *.js }
+header @js Content-Type application/javascript
+
+@css { path *.css }
+header @css Content-Type text/css
+
+@wasm { path *.wasm }
+header @wasm Content-Type application/wasm
+
+# Optional: gzip/zstd compress for these types
+@compressible { path *.html *.js *.css *.wasm }
+encode @compressible gzip zstd
 
 # Security headers
 header {
