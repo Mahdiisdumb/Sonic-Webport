@@ -5,26 +5,13 @@ root * .
 file_server
 encode gzip zstd
 
-# Default: treat everything as binary and prevent caching
+# Default to binary, no persistent cache
 header * Content-Type application/octet-stream
-header * Cache-Control "no-store, max-age=0, must-revalidate"
+header * Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
 
-# Exceptions: let the browser interpret these correctly
-@html { path *.html }
-header @html Content-Type text/html
-
-@js { path *.js }
-header @js Content-Type application/javascript
-
-@css { path *.css }
-header @css Content-Type text/css
-
-@wasm { path *.wasm }
-header @wasm Content-Type application/wasm
-
-# Optional: gzip/zstd compress for these types
-@compressible { path *.html *.js *.css *.wasm }
-encode @compressible gzip zstd
+# Exceptions for HTML/JS/CSS/WASM
+@text_files { path *.html *.js *.css *.wasm }
+header @text_files Content-Type "text/html; charset=utf-8"
 
 # Security headers
 header {
