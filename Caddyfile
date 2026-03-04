@@ -3,18 +3,17 @@
 root * .
 
 file_server
+
 encode gzip zstd {
-    match {
-        not path *.wasm *.zip *.bin *.cue *.iso *.chd
-    }
+    not path *.wasm *.zip *.bin *.cue *.iso *.chd
 }
 
 # Serve WASM files with correct MIME
-@wasm_files { path *.wasm }
+@wasm_files path *.wasm
 header @wasm_files Content-Type application/wasm
 
 # Optional: other binary files
-@binary_files { path *.data *.mem *.symbols.json }
+@binary_files path *.data *.mem *.symbols.json
 header @binary_files Content-Type application/octet-stream
 
 # Security headers
