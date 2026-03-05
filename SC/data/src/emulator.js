@@ -4,16 +4,16 @@ class EmulatorJS {
             "atari5200": ["a5200"],
             "vb": ["beetle_vb"],
             "nds": ["melonds", "desmume", "desmume2015"],
-            "arcade": ["fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2"],
+            "arcade": ["fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi"],
             "nes": ["fceumm", "nestopia"],
             "gb": ["gambatte"],
             "coleco": ["gearcoleco"],
-            "segaMS": ["smsplus", "genesis_plus_gx", "picodrive"],
-            "segaMD": ["genesis_plus_gx", "picodrive"],
-            "segaGG": ["genesis_plus_gx"],
-            "segaCD": ["genesis_plus_gx", "picodrive"],
+            "segaMS": ["smsplus", "genesis_plus_gx", "genesis_plus_gx_wide", "picodrive"],
+            "segaMD": ["genesis_plus_gx", "genesis_plus_gx_wide", "picodrive"],
+            "segaGG": ["genesis_plus_gx", "genesis_plus_gx_wide"],
+            "segaCD": ["genesis_plus_gx", "genesis_plus_gx_wide", "picodrive"],
             "sega32x": ["picodrive"],
-            "sega": ["genesis_plus_gx", "picodrive"],
+            "sega": ["genesis_plus_gx", "genesis_plus_gx_wide", "picodrive"],
             "lynx": ["handy"],
             "mame": ["mame2003_plus", "mame2003"],
             "ngp": ["mednafen_ngp"],
@@ -26,7 +26,7 @@ class EmulatorJS {
             "3do": ["opera"],
             "psp": ["ppsspp"],
             "atari7800": ["prosystem"],
-            "snes": ["snes9x"],
+            "snes": ["snes9x", "bsnes"],
             "atari2600": ["stella2014"],
             "jaguar": ["virtualjaguar"],
             "segaSaturn": ["yabause"],
@@ -36,7 +36,8 @@ class EmulatorJS {
             "pet": ["vice_xpet"],
             "plus4": ["vice_xplus4"],
             "vic20": ["vice_xvic"],
-            "dos": ["dosbox_pure"]
+            "dos": ["dosbox_pure"],
+            "intv": ["freeintv"]
         };
         if (this.isSafari && this.isMobile) {
             rv.n64 = rv.n64.reverse();
@@ -89,75 +90,119 @@ class EmulatorJS {
             data[i].elem.removeEventListener(data[i].listener, data[i].cb);
         }
     }
-    downloadFile(path, progressCB, notWithPath, opts) {
-        return new Promise(async cb => {
-            const data = this.toData(path); //check other data types
+    /**
+     * Downloads a file from the specified path.
+     * Helper method that delegates to EJS_Download system for all URL-based downloads.
+     * Handles direct data objects (ArrayBuffer, Uint8Array, Blob) and constructs proper paths.
+     * @param {*} path The path to the file to download.
+     * @param {*} type The expected type of the file.
+     * @param {*} progress A callback function for progress updates.
+     * @param {*} notWithPath Whether to exclude the base path.
+     * @param {*} opts Additional options for the download.
+     * @param {boolean} forceExtract Whether to force extraction of compressed files regardless of extension (default is false).
+     * @param {boolean} dontCache If true, the downloaded file will not be cached (default is false).
+     * @returns A promise that resolves with the downloaded file data.
+     */
+    downloadFile(path, type, progress, notWithPath, opts, forceExtract = false, dontCache = false) {
+        if (this.debug) console.log("[EJS " + type + "] Downloading " + path);
+        return new Promise(async (resolve) => {
+            // Handle direct data objects (ArrayBuffer, Uint8Array, Blob)
+            const data = this.toData(path);
             if (data) {
                 data.then((game) => {
                     if (opts.method === "HEAD") {
-                        cb({ headers: {} });
+                        resolve({ headers: {} });
                     } else {
-                        cb({ headers: {}, data: game });
+                        resolve({ headers: {}, data: game });
                     }
-                })
+                });
                 return;
             }
+
+            // Construct the full path/URL
             const basePath = notWithPath ? "" : this.config.dataPath;
-            path = basePath + path;
+            let fullPath = basePath + path;
             if (!notWithPath && this.config.filePaths && typeof this.config.filePaths[path.split("/").pop()] === "string") {
-                path = this.config.filePaths[path.split("/").pop()];
+                fullPath = this.config.filePaths[path.split("/").pop()];
             }
-            let url;
-            try { url = new URL(path) } catch(e) {};
-            if (url && !["http:", "https:"].includes(url.protocol)) {
-                //Most commonly blob: urls. Not sure what else it could be
-                if (opts.method === "HEAD") {
-                    cb({ headers: {} });
+
+            // Delegate all URL downloads (http, https, blob, data, etc.) to EJS_Download
+            try {
+                const onProgress = progress instanceof Function ? (status, percentage, loaded, total) => {
+                    if (status === "downloading") {
+                        const progressText = total ? " " + Math.floor(percentage).toString() + "%" : " " + (loaded / 1048576).toFixed(2) + "MB";
+                        progress(progressText);
+                    }
+                } : null;
+
+                const onComplete = (success, result) => {
+                    if (!success) {
+                        console.error("Download failed in onComplete:", result);
+                    }
+                };
+
+                const responseType = opts.responseType || "arraybuffer";
+                const method = opts.method || "GET";
+                const headers = {};
+                const timeout = 30000;
+
+                const cacheItem = await this.downloader.downloadFile(
+                    fullPath,
+                    type,
+                    method,
+                    headers,
+                    null,
+                    onProgress,
+                    onComplete,
+                    timeout,
+                    responseType,
+                    forceExtract,
+                    dontCache
+                );
+
+                // Handle HEAD requests (returns null)
+                if (!cacheItem) {
+                    resolve({ headers: {} });
                     return;
                 }
-                try {
-                    let res = await fetch(path)
-                    if ((opts.type && opts.type.toLowerCase() === "arraybuffer") || !opts.type) {
-                        res = await res.arrayBuffer();
+
+                // Extract the data from the cache item
+                if (cacheItem.files && cacheItem.files.length > 0) {
+                    // If there are files, return the entire cache item
+                    // so the caller can access all extracted files
+                    if (cacheItem.files.length > 0) {
+                        resolve({
+                            data: cacheItem,
+                            headers: {
+                                "content-length": cacheItem.files.reduce((sum, f) => sum + (f.bytes.byteLength || 0), 0)
+                            }
+                        });
                     } else {
-                        res = await res.text();
-                        try { res = JSON.parse(res) } catch(e) {}
-                    }
-                    if (path.startsWith("blob:")) URL.revokeObjectURL(path);
-                    cb({ data: res, headers: {} });
-                } catch(e) {
-                    cb(-1);
-                }
-                return;
-            }
-            const xhr = new XMLHttpRequest();
-            if (progressCB instanceof Function) {
-                xhr.addEventListener("progress", (e) => {
-                    const progress = e.total ? " " + Math.floor(e.loaded / e.total * 100).toString() + "%" : " " + (e.loaded / 1048576).toFixed(2) + "MB";
-                    progressCB(progress);
-                });
-            }
-            xhr.onload = function() {
-                if (xhr.readyState === xhr.DONE) {
-                    let data = xhr.response;
-                    if (xhr.status.toString().startsWith("4") || xhr.status.toString().startsWith("5")) {
-                        cb(-1);
-                        return;
-                    }
-                    try { data = JSON.parse(data) } catch(e) {}
-                    cb({
-                        data: data,
-                        headers: {
-                            "content-length": xhr.getResponseHeader("content-length")
+                        let data = cacheItem.files[0].bytes;
+                        
+                        // Convert to appropriate format based on responseType
+                        if (responseType === "text" || (opts.type && opts.type.toLowerCase() === "text")) {
+                            const decoder = new TextDecoder();
+                            data = decoder.decode(data);
+                            try { data = JSON.parse(data) } catch(e) {}
                         }
-                    });
+
+                        resolve({
+                            data: data,
+                            headers: {
+                                "content-length": data.byteLength || data.length
+                            }
+                        });
+                    }
+                } else {
+                    console.error("Invalid cache item returned:", cacheItem);
+                    resolve(-1);
                 }
+            } catch(error) {
+                console.error("Download error:", error);
+                resolve(-1);
             }
-            if (opts.responseType) xhr.responseType = opts.responseType;
-            xhr.onerror = () => cb(-1);
-            xhr.open(opts.method, path, true);
-            xhr.send();
-        })
+        });
     }
     toData(data, rv) {
         if (!(data instanceof ArrayBuffer) && !(data instanceof Uint8Array) && !(data instanceof Blob)) return null;
@@ -200,15 +245,58 @@ class EmulatorJS {
         return parseInt(rv.join(""));
     }
     constructor(element, config) {
-        this.ejs_version = "4.2.3";
+        this.ejs_version = "4.3.0-beta";
         this.extensions = [];
+        this.allSettings = {};
         this.initControlVars();
         this.debug = (window.EJS_DEBUG_XX === true);
-        if (this.debug || (window.location && ["localhost", "127.0.0.1"].includes(location.hostname))) this.checkForUpdates();
-        this.netplayEnabled = (window.EJS_DEBUG_XX === true) && (window.EJS_EXPERIMENTAL_NETPLAY === true);
+        if (this.debug || (window.location && ["localhost", "127.0.0.1"].includes(location.hostname))) {
+            this.checkForUpdates();
+        }
+        this.netplayEnabled = true;
+        this.utils = new EJS_UTILS();
         this.config = config;
+        // set cache configuration defaults
+        const cacheConfigDefaults = {
+            enabled: true,
+            cacheMaxSizeMB: 4096,
+            cacheMaxAgeMins: 7200
+        };
+        // Overwrite invalid or missing values in this.config.cacheConfig with defaults
+        if (this.config.cacheConfig === undefined || typeof this.config.cacheConfig !== "object") {
+            this.config.cacheConfig = cacheConfigDefaults;
+        } else {
+            if (!this.config.cacheConfig || typeof this.config.cacheConfig !== "object") {
+                this.config.cacheConfig = {};
+            }
+            if (typeof this.config.cacheConfig.enabled !== "boolean") {
+                this.config.cacheConfig.enabled = cacheConfigDefaults.enabled;
+            }
+            if (typeof this.config.cacheConfig.cacheMaxSizeMB !== "number" || this.config.cacheConfig.cacheMaxSizeMB <= 0) {
+                this.config.cacheConfig.cacheMaxSizeMB = cacheConfigDefaults.cacheMaxSizeMB;
+            }
+            if (typeof this.config.cacheConfig.cacheMaxAgeMins !== "number" || this.config.cacheConfig.cacheMaxAgeMins <= 0) {
+                this.config.cacheConfig.cacheMaxAgeMins = cacheConfigDefaults.cacheMaxAgeMins;
+            }
+        }
         this.config.buttonOpts = this.buildButtonOptions(this.config.buttonOpts);
         this.config.settingsLanguage = window.EJS_settingsLanguage || false;
+        switch (this.config.browserMode) {
+            case 1: // Force mobile
+            case "1":
+            case "mobile":
+                if (this.debug) { console.log("Force mobile mode is enabled"); }
+                this.config.browserMode = 1;
+                break;
+            case 2: // Force desktop
+            case "2":
+            case "desktop":
+                if (this.debug) { console.log("Force desktop mode is enabled"); }
+                this.config.browserMode = 2;
+                break;
+            default: // Auto detect
+                config.browserMode = undefined;
+        }
         this.currentPopup = null;
         this.isFastForward = false;
         this.isSlowMotion = false;
@@ -218,7 +306,21 @@ class EmulatorJS {
         this.cheats = [];
         this.started = false;
         this.volume = (typeof this.config.volume === "number") ? this.config.volume : 0.5;
-        if (this.config.defaultControllers) this.defaultControllers = this.config.defaultControllers;
+        if (this.config.defaultControllers) {
+            // Merge user config with defaults instead of replacing
+            for (const [player, buttons] of Object.entries(this.config.defaultControllers)) {
+                this.defaultControllers[player] = this.defaultControllers[player] || {};
+
+                for (const [button, config] of Object.entries(buttons)) {
+                    this.defaultControllers[player][button] = {
+                        ...(this.defaultControllers[player][button] || {}),
+                        ...config
+                    };
+                }
+            }
+        }
+        this.defaultAutoFireInterval = 100;
+        this.autofireIntervals = {};
         this.muted = false;
         this.paused = true;
         this.missingLang = [];
@@ -230,7 +332,15 @@ class EmulatorJS {
             this.config.adSize = (Array.isArray(this.config.adSize)) ? this.config.adSize : ["300px", "250px"];
             this.setupAds(this.config.adUrl, this.config.adSize[0], this.config.adSize[1]);
         }
-        this.isMobile = (function() {
+        this.isMobile = (() => {
+            // browserMode can be either a 1 (force mobile), 2 (force desktop) or undefined (auto detect)
+            switch (this.config.browserMode) {
+                case 1:
+                    return true;
+                case 2:
+                    return false;
+            }
+
             let check = false;
             (function (a) { if (/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true; })(navigator.userAgent || navigator.vendor || window.opera);
             return check;
@@ -265,7 +375,28 @@ class EmulatorJS {
         this.capture.video.videoBitrate = (typeof this.capture.video.videoBitrate === "number") ? this.capture.video.videoBitrate : 2.5 * 1024 * 1024;
         this.capture.video.audioBitrate = (typeof this.capture.video.audioBitrate === "number") ? this.capture.video.audioBitrate : 192 * 1024;
         this.bindListeners();
-        this.config.netplayUrl = this.config.netplayUrl || "https://netplay.emulatorjs.org";
+        // Additions for Netplay
+        this.netplayCanvas = null; 
+        this.netplayShowTurnWarning = false;
+        this.netplayWarningShown = false;
+        if (this.netplayEnabled) {
+            const iceServers = this.config.netplayICEServers || window.EJS_netplayICEServers || [];
+            const hasTurnServer = iceServers.some(server => 
+                server && typeof server.urls === 'string' && server.urls.startsWith('turn:')
+            );
+            if (!hasTurnServer) {
+                this.netplayShowTurnWarning = true;
+            }
+            if (this.netplayShowTurnWarning && this.debug) {
+                console.warn("WARNING: No TURN addresses are configured! Many clients may fail to connect!");
+            }
+        }
+
+        if ((this.isMobile || this.hasTouchScreen) && this.virtualGamepad) {
+            this.virtualGamepad.classList.add("ejs-vgamepad-active");
+            this.canvas.classList.add("ejs-canvas-no-pointer");
+        }
+
         this.fullscreen = false;
         this.enableMouseLock = false;
         this.supportsWebgl2 = !!document.createElement("canvas").getContext("webgl2") && (this.config.forceLegacyCores !== true);
@@ -279,19 +410,38 @@ class EmulatorJS {
             return null;
         })();
         this.isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-        if (this.config.disableDatabases) {
-            this.storage = {
-                rom: new window.EJS_DUMMYSTORAGE(),
-                bios: new window.EJS_DUMMYSTORAGE(),
-                core: new window.EJS_DUMMYSTORAGE()
-            }
-        } else {
-            this.storage = {
-                rom: new window.EJS_STORAGE("EmulatorJS-roms", "rom"),
-                bios: new window.EJS_STORAGE("EmulatorJS-bios", "bios"),
-                core: new window.EJS_STORAGE("EmulatorJS-core", "core")
-            }
+
+        this.storage = {}
+    
+        if (this.config.disableDatabases === true) {
+            this.config.cacheConfig.enabled = false;
         }
+        
+        // Populate downloadTypes
+        this.downloadType = {
+            "rom": { "name": "ROM", "dontCache": false },
+            "core": { "name": "Core", "dontCache": false },
+            "bios": { "name": "BIOS", "dontCache": false },
+            "parent": { "name": "Parent", "dontCache": false },
+            "patch": { "name": "Patch", "dontCache": false },
+            "reports": { "name": "Reports", "dontCache": true },
+            "states": { "name": "States", "dontCache": true },
+            "support": { "name": "Support", "dontCache": true },
+            "unknown": { "name": "Unknown", "dontCache": true }
+        }
+
+        // Initialize storage cache
+        this.storageCache = new window.EJS_Cache(
+            this.config.cacheConfig.enabled,
+            "EmulatorJS-Cache",
+            this.config.cacheConfig.cacheMaxSizeMB,
+            this.config.cacheConfig.cacheMaxAgeMins || 7200,
+            this.debug
+        );
+
+        // Initialize downloader with cache
+        this.downloader = new window.EJS_Download(this.storageCache, this);
+        
         // This is not cache. This is save data
         this.storage.states = new window.EJS_STORAGE("EmulatorJS-states", "states");
 
@@ -324,7 +474,26 @@ class EmulatorJS {
 
         this.createStartButton();
         this.handleResize();
+
+        if (this.config.fixedSaveInterval) {
+            this.startSaveInterval(this.config.fixedSaveInterval);
+        }
     }
+
+    startSaveInterval(period) {
+        if (this.saveSaveInterval) {
+            clearInterval(this.saveSaveInterval);
+            this.saveSaveInterval = null;
+        }
+        // Disabled
+        if (period === 0 || isNaN(period)) return;
+        if (this.started) this.gameManager.saveSaveFiles();
+        if (this.debug) console.log("Saving every", period, "miliseconds");
+        this.saveSaveInterval = setInterval(() => {
+            if (this.started) this.gameManager.saveSaveFiles();
+        }, period);
+    }
+
     setColor(color) {
         if (typeof color !== "string") color = "";
         let getColor = function(color) {
@@ -486,22 +655,11 @@ class EmulatorJS {
             if (typeof log === "undefined") log = true;
             if (!this.config.langJson[text] && log) {
                 if (!this.missingLang.includes(text)) this.missingLang.push(text);
-                console.log(`Translation not found for '${text}'. Language set to '${this.config.language}'`);
+                if (this.debug) console.log(`Translation not found for '${text}'. Language set to '${this.config.language}'`);
             }
             return this.config.langJson[text] || text;
         }
         return text;
-    }
-    checkCompression(data, msg, fileCbFunc) {
-        if (!this.compression) {
-            this.compression = new window.EJS_COMPRESSION(this);
-        }
-        if (msg) {
-            this.textElem.innerText = msg;
-        }
-        return this.compression.decompress(data, (m, appendMsg) => {
-            this.textElem.innerText = appendMsg ? (msg + m) : m;
-        }, fileCbFunc);
     }
     checkCoreCompatibility(version) {
         if (this.versionAsInt(version.minimumEJSVersion) > this.versionAsInt(this.ejs_version)) {
@@ -539,48 +697,86 @@ class EmulatorJS {
         }
         const gotCore = (data) => {
             this.defaultCoreOpts = {};
-            this.checkCompression(new Uint8Array(data), this.localization("Decompress Game Core")).then((data) => {
-                let js, thread, wasm;
-                for (let k in data) {
-                    if (k.endsWith(".wasm")) {
-                        wasm = data[k];
-                    } else if (k.endsWith(".worker.js")) {
-                        thread = data[k];
-                    } else if (k.endsWith(".js")) {
-                        js = data[k];
-                    } else if (k === "build.json") {
-                        this.checkCoreCompatibility(JSON.parse(new TextDecoder().decode(data[k])));
-                    } else if (k === "core.json") {
-                        let core = JSON.parse(new TextDecoder().decode(data[k]));
-                        this.extensions = core.extensions;
-                        this.coreName = core.name;
-                        this.repository = core.repo;
-                        this.defaultCoreOpts = core.options;
-                        this.enableMouseLock = core.options.supportsMouse;
-                        this.retroarchOpts = core.retroarchOpts;
-                        this.saveFileExt = core.save;
-                    } else if (k === "license.txt") {
-                        this.license = new TextDecoder().decode(data[k]);
-                    }
+            
+            let decompressedData = {};
+            
+            // Check if data is already a cache item with extracted files
+            if (data && data.files && Array.isArray(data.files)) {
+                console.log("[EJS Core] Data is already decompressed cache item");
+                // Convert cache item files array to object keyed by filename
+                for (const file of data.files) {
+                    decompressedData[file.filename] = file.bytes;
                 }
-
-                if (this.saveFileExt === false) {
-                    this.elements.bottomBar.saveSavFiles[0].style.display = "none";
-                    this.elements.bottomBar.loadSavFiles[0].style.display = "none";
+                this.processCore(decompressedData);
+            } else {
+                // Data is still compressed, need to decompress
+                console.log("[EJS Core] Data needs decompression");
+                if (!this.compression) {
+                    this.compression = new window.EJS_COMPRESSION(this);
                 }
-
-                this.initGameCore(js, wasm, thread);
-            });
+                
+                this.textElem.innerText = this.localization("Decompress Game Core");
+                
+                this.compression.decompress(new Uint8Array(data), (m, appendMsg) => {
+                    this.textElem.innerText = appendMsg ? (this.localization("Decompress Game Core") + m) : m;
+                }, null).then(async (decompressedData) => {
+                    this.processCore(decompressedData);
+                });
+            }
         }
+        
+        this.processCore = (decompressedData) => {
+            if (this.debug) console.log("[EJS Core] Decompressed files:", Object.keys(decompressedData));
+            let js, thread, wasm;
+            for (let k in decompressedData) {
+                if (k.endsWith(".wasm")) {
+                    wasm = decompressedData[k];
+                } else if (k.endsWith(".worker.js")) {
+                    thread = decompressedData[k];
+                } else if (k.endsWith(".js")) {
+                    js = decompressedData[k];
+                } else if (k === "build.json") {
+                    this.checkCoreCompatibility(JSON.parse(new TextDecoder().decode(decompressedData[k])));
+                } else if (k === "core.json") {
+                    let core = JSON.parse(new TextDecoder().decode(decompressedData[k]));
+                    this.extensions = core.extensions;
+                    this.coreName = core.name;
+                    this.repository = core.repo;
+                    this.defaultCoreOpts = core.options;
+                    this.enableMouseLock = core.options.supportsMouse;
+                    this.retroarchOpts = core.retroarchOpts;
+                    this.saveFileExt = core.save;
+                } else if (k === "license.txt") {
+                    this.license = new TextDecoder().decode(decompressedData[k]);
+                }
+            }
+
+            if (this.saveFileExt === false) {
+                this.elements.bottomBar.saveSavFiles[0].style.display = "none";
+                this.elements.bottomBar.loadSavFiles[0].style.display = "none";
+            }
+
+            if (this.debug) console.log("[EJS Core] Core decompression complete");
+            if (this.debug) console.log("[EJS Core] js size:", js?.byteLength, "wasm size:", wasm?.byteLength, "thread size:", thread?.byteLength);
+
+            this.initGameCore(js, wasm, thread);
+        }
+
         const report = "cores/reports/" + this.getCore() + ".json";
-        this.downloadFile(report, null, false, { responseType: "text", method: "GET" }).then(async rep => {
+        // Add cache-busting parameter periodically to ensure we get updated build versions
+        // This ensures that when cores are updated, we'll eventually get the new buildStart value
+        const cacheBustInterval = 1000 * 60 * 60; // 1 hour
+        const cacheBustParam = Math.floor(Date.now() / cacheBustInterval);
+        const reportUrl = `${report}?v=${cacheBustParam}`;
+
+        this.downloadFile(reportUrl, this.downloadType.reports.name, null, false, { responseType: "text", method: "GET" }, false, this.downloadType.reports.dontCache).then(async rep => {
             if (rep === -1 || typeof rep === "string" || typeof rep.data === "string") {
                 rep = {};
             } else {
                 rep = rep.data;
             }
             if (!rep.buildStart) {
-                console.warn("Could not fetch core report JSON! Core caching will be disabled!");
+                console.warn("Could not fetch core report JSON at " + reportUrl + "! Core caching will be disabled!");
                 rep.buildStart = Math.random() * 100;
             }
             if (this.webgl2Enabled === null) {
@@ -601,24 +797,20 @@ class EmulatorJS {
 
             let legacy = (this.supportsWebgl2 && this.webgl2Enabled ? "" : "-legacy");
             let filename = this.getCore() + (threads ? "-thread" : "") + legacy + "-wasm.data";
-            if (!this.debug) {
-                const result = await this.storage.core.get(filename);
-                if (result && result.version === rep.buildStart) {
-                    gotCore(result.data);
-                    return;
-                }
-            }
+
+            // Download the core
+            console.log("[EJS Core] Downloading core:", filename);
             const corePath = "cores/" + filename;
-            let res = await this.downloadFile(corePath, (progress) => {
+            let res = await this.downloadFile(corePath, this.downloadType.core.name, (progress) => {
                 this.textElem.innerText = this.localization("Download Game Core") + progress;
-            }, false, { responseType: "arraybuffer", method: "GET" });
+            }, false, { responseType: "arraybuffer", method: "GET" }, true, this.downloadType.core.dontCache);
             if (res === -1) {
                 console.log("File not found, attemping to fetch from emulatorjs cdn.");
                 console.error("**THIS METHOD IS A FAILSAFE, AND NOT OFFICIALLY SUPPORTED. USE AT YOUR OWN RISK**");
                 let version = this.ejs_version.endsWith("-beta") ? "nightly" : this.ejs_version;
-                res = await this.downloadFile(`https://cdn.emulatorjs.org/${version}/data/${corePath}`, (progress) => {
+                res = await this.downloadFile(`https://cdn.emulatorjs.org/${version}/data/${corePath}`, this.downloadType.core.name, (progress) => {
                     this.textElem.innerText = this.localization("Download Game Core") + progress;
-                }, true, { responseType: "arraybuffer", method: "GET" });
+                }, true, { responseType: "arraybuffer", method: "GET" }, true, this.downloadType.core.dontCache);
                 if (res === -1) {
                     if (!this.supportsWebgl2) {
                         this.startGameError(this.localization("Outdated graphics driver"));
@@ -629,11 +821,9 @@ class EmulatorJS {
                 }
                 console.warn("File was not found locally, but was found on the emulatorjs cdn.\nIt is recommended to download the stable release from here: https://cdn.emulatorjs.org/releases/");
             }
+
+            // Core download and caching handled by EJS_Download
             gotCore(res.data);
-            this.storage.core.put(filename, {
-                version: rep.buildStart,
-                data: res.data
-            });
         });
     }
     initGameCore(js, wasm, thread) {
@@ -667,6 +857,7 @@ class EmulatorJS {
         if (!this.msgElem) {
             this.msgElem = this.createElement("div");
             this.msgElem.classList.add("ejs_message");
+            this.msgElem.style.zIndex = "6";
             this.elements.parent.appendChild(this.msgElem);
         }
         clearTimeout(this.msgTimeout);
@@ -683,9 +874,9 @@ class EmulatorJS {
             }
             this.textElem.innerText = this.localization("Download Game State");
 
-            this.downloadFile(this.config.loadState, (progress) => {
+            this.downloadFile(this.config.loadState, this.downloadType.states.name, (progress) => {
                 this.textElem.innerText = this.localization("Download Game State") + progress;
-            }, true, { responseType: "arraybuffer", method: "GET" }).then((res) => {
+            }, true, { responseType: "arraybuffer", method: "GET" }, false, this.downloadType.states.dontCache).then((res) => {
                 if (res === -1) {
                     this.startGameError(this.localization("Error downloading game state"));
                     return;
@@ -699,235 +890,285 @@ class EmulatorJS {
             });
         })
     }
-    downloadGameFile(assetUrl, type, progressMessage, decompressProgressMessage) {
+
+    /**
+     * Download a file, with caching and File object support
+     * @param {*} url The URL or File object to download
+     * @param {*} type The download type (from this.downloadType)
+     * @returns 
+     */
+    download(url, type) {
+        if (url === undefined || url === null || url === "") {
+            if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] No URL provided, skipping download.");
+            return new Promise((resolve) => {
+                resolve(url);
+            });
+        }
+
+        if (!this.compression) {
+            this.compression = new window.EJS_COMPRESSION(this);
+        }
+
         return new Promise(async (resolve, reject) => {
-            if ((typeof assetUrl !== "string" || !assetUrl.trim()) && !this.toData(assetUrl, true)) {
-                return resolve(assetUrl);
-            }
-            const gotData = async (input) => {
-                if (this.config.dontExtractBIOS === true) {
-                    this.gameManager.FS.writeFile(assetUrl, new Uint8Array(input));
-                    return resolve(assetUrl);
-                }
-                const data = await this.checkCompression(new Uint8Array(input), decompressProgressMessage);
-                for (const k in data) {
-                    const coreFilename = "/" + this.fileName;
-                    const coreFilePath = coreFilename.substring(0, coreFilename.length - coreFilename.split("/").pop().length);
-                    if (k === "!!notCompressedData") {
-                        this.gameManager.FS.writeFile(coreFilePath + assetUrl.split("/").pop().split("#")[0].split("?")[0], data[k]);
-                        break;
-                    }
-                    if (k.endsWith("/")) continue;
-                    this.gameManager.FS.writeFile(coreFilePath + k.split("/").pop(), data[k]);
-                }
-            }
+            let returnData;
 
-            this.textElem.innerText = progressMessage;
-            if (!this.debug) {
-                const res = await this.downloadFile(assetUrl, null, true, { method: "HEAD" });
-                const result = await this.storage.rom.get(assetUrl.split("/").pop());
-                if (result && result["content-length"] === res.headers["content-length"] && result.type === type) {
-                    await gotData(result.data);
-                    return resolve(assetUrl);
-                }
-            }
-            const res = await this.downloadFile(assetUrl, (progress) => {
-                this.textElem.innerText = progressMessage + progress;
-            }, true, { responseType: "arraybuffer", method: "GET" });
-            if (res === -1) {
-                this.startGameError(this.localization("Network Error"));
-                resolve(assetUrl);
-                return;
-            }
-            if (assetUrl instanceof File) {
-                assetUrl = assetUrl.name;
-            } else if (this.toData(assetUrl, true)) {
-                assetUrl = "game";
-            }
-            await gotData(res.data);
-            resolve(assetUrl);
-            const limit = (typeof this.config.cacheLimit === "number") ? this.config.cacheLimit : 1073741824;
-            if (parseFloat(res.headers["content-length"]) < limit && this.saveInBrowserSupported() && assetUrl !== "game") {
-                this.storage.rom.put(assetUrl.split("/").pop(), {
-                    "content-length": res.headers["content-length"],
-                    data: res.data,
-                    type: type
-                })
-            }
-        });
-    }
-    downloadGamePatch() {
-        return new Promise(async (resolve) => {
-            this.config.gamePatchUrl = await this.downloadGameFile(this.config.gamePatchUrl, "patch", this.localization("Download Game Patch"), this.localization("Decompress Game Patch"));
-            resolve();
-        });
-    }
-    downloadGameParent() {
-        return new Promise(async (resolve) => {
-            this.config.gameParentUrl = await this.downloadGameFile(this.config.gameParentUrl, "parent", this.localization("Download Game Parent"), this.localization("Decompress Game Parent"));
-            resolve();
-        });
-    }
-    downloadBios() {
-        return new Promise(async (resolve) => {
-            this.config.biosUrl = await this.downloadGameFile(this.config.biosUrl, "bios", this.localization("Download Game BIOS"), this.localization("Decompress Game BIOS"));
-            resolve();
-        });
-    }
-    downloadRom() {
-        const supportsExt = (ext) => {
-            const core = this.getCore();
-            if (!this.extensions) return false;
-            return this.extensions.includes(ext);
-        };
+            // check if url is a file object, and if so convert it to an EJS_CacheItem
+            if (typeof url === "object" && url instanceof File) {
+                if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Requested download for File object " + url.name);
 
-        return new Promise(resolve => {
-            this.textElem.innerText = this.localization("Download Game Data");
+                // Convert File to Uint8Array
+                const arrayBuffer = await url.arrayBuffer();
+                const inData = new Uint8Array(arrayBuffer);
 
-            const gotGameData = (data) => {
-                if (["arcade", "mame"].includes(this.getCore(true))) {
-                    this.fileName = this.getBaseFileName(true);
-                    this.gameManager.FS.writeFile(this.fileName, new Uint8Array(data));
-                    resolve();
-                    return;
-                }
-
-                const altName = this.getBaseFileName(true);
-
-                let disableCue = false;
-                if (["pcsx_rearmed", "genesis_plus_gx", "picodrive", "mednafen_pce", "smsplus", "vice_x64", "vice_x64sc", "vice_x128", "vice_xvic", "vice_xplus4", "vice_xpet", "puae"].includes(this.getCore()) && this.config.disableCue === undefined) {
-                    disableCue = true;
+                // check cache
+                let key = this.storageCache.generateCacheKey(inData);
+                let cachedItem = await this.storageCache.get(key);
+                if (cachedItem) {
+                    if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Using cached content for " + url.name);
+                    returnData = cachedItem;
                 } else {
-                    disableCue = this.config.disableCue;
-                }
+                    // Not in cache - decompress
+                    let files = [];
+                    const decompressedData = await this.compression.decompress(inData, (m, appendMsg) => {
+                        this.textElem.innerText = appendMsg ? (this.localization("Decompress Game Core") + m) : m;
+                    }, (fileName, fileData) => {
+                        // Use file callback to collect files during decompression
+                        let bytes;
+                        if (fileData instanceof Uint8Array) {
+                            bytes = fileData;
+                        } else if (fileData instanceof ArrayBuffer) {
+                            bytes = new Uint8Array(fileData);
+                        } else if (fileData && typeof fileData === 'object') {
+                            // Handle case where it might be an object with numeric keys
+                            bytes = new Uint8Array(Object.values(fileData));
+                        } else {
+                            console.error("Unknown file data type:", typeof fileData, fileData);
+                            return;
+                        }
 
-                let fileNames = [];
-                this.checkCompression(new Uint8Array(data), this.localization("Decompress Game Data"), (fileName, fileData) => {
-                    if (fileName.includes("/")) {
-                        const paths = fileName.split("/");
-                        let cp = "";
-                        for (let i = 0; i < paths.length - 1; i++) {
-                            if (paths[i] === "") continue;
-                            cp += `/${paths[i]}`;
-                            if (!this.gameManager.FS.analyzePath(cp).exists) {
-                                this.gameManager.FS.mkdir(cp);
-                            }
-                        }
-                    }
-                    if (fileName.endsWith("/")) {
-                        this.gameManager.FS.mkdir(fileName);
-                        return;
-                    }
-                    if (fileName === "!!notCompressedData") {
-                        this.gameManager.FS.writeFile(altName, fileData);
-                        fileNames.push(altName);
-                    } else {
-                        this.gameManager.FS.writeFile(`/${fileName}`, fileData);
-                        fileNames.push(fileName);
-                    }
-                }).then(() => {
-                    let isoFile = null;
-                    let supportedFile = null;
-                    let cueFile = null;
-                    let selectedCueExt = null;
-                    fileNames.forEach(fileName => {
-                        const ext = fileName.split(".").pop().toLowerCase();
-                        if (supportedFile === null && supportsExt(ext)) {
-                            supportedFile = fileName;
-                        }
-                        if (isoFile === null && ["iso", "cso", "chd", "elf"].includes(ext)) {
-                            isoFile = fileName;
-                        }
-                        if (["cue", "ccd", "toc", "m3u"].includes(ext)) {
-                            if (this.getCore(true) === "psx") {
-                                //always prefer m3u files for psx cores
-                                if (selectedCueExt !== "m3u") {
-                                    if (cueFile === null || ext === "m3u") {
-                                        cueFile = fileName;
-                                        selectedCueExt = ext;
-                                    }
-                                }
-                            } else {
-                                //prefer cue or ccd files over toc or m3u
-                                if (!["cue", "ccd"].includes(selectedCueExt)) {
-                                    if (cueFile === null || ["cue", "ccd"].includes(ext)) {
-                                        cueFile = fileName;
-                                        selectedCueExt = ext;
-                                    }
-                                }
-                            }
+                        if (fileName === "!!notCompressedData") {
+                            files.push(new EJS_FileItem(url.name, bytes));
+                        } else if (!fileName.endsWith("/")) {
+                            files.push(new EJS_FileItem(fileName, bytes));
                         }
                     });
-                    if (supportedFile !== null) {
-                        this.fileName = supportedFile;
-                    } else {
-                        this.fileName = fileNames[0];
-                    }
-                    if (isoFile !== null && (supportsExt("iso") || supportsExt("cso") || supportsExt("chd") || supportsExt("elf"))) {
-                        this.fileName = isoFile;
-                    } else if (supportsExt("cue") || supportsExt("ccd") || supportsExt("toc") || supportsExt("m3u")) {
-                        if (cueFile !== null) {
-                            this.fileName = cueFile;
-                        } else if (!disableCue) {
-                            this.fileName = this.gameManager.createCueFile(fileNames);
-                        }
-                    }
-                    resolve();
-                });
-            }
-            const downloadFile = async () => {
-                const res = await this.downloadFile(this.config.gameUrl, (progress) => {
-                    this.textElem.innerText = this.localization("Download Game Data") + progress;
-                }, true, { responseType: "arraybuffer", method: "GET" });
-                if (res === -1) {
+
+                    // construct EJS_CacheItem
+                    let data = new EJS_CacheItem(
+                        key,
+                        files,
+                        Date.now(),
+                        type.name,
+                        "arraybuffer",
+                        url.name,
+                        url.name,
+                        Date.now() + 5 * 24 * 60 * 60 * 1000 // 5 days expiration
+                    );
+
+                    this.storageCache.put(data);
+
+                    returnData = data;
+                }
+            } else {
+                // download using a url
+                if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Requested download for " + url);
+                // download the content
+                const data = await this.downloadFile(
+                    url,
+                    type.name,
+                    (progress) => {
+                        this.textElem.innerText = this.localization("Download Game Data") + progress;
+                    },
+                    true,
+                    { responseType: "arraybuffer", method: "GET" },
+                    false,
+                    type.dontCache
+                );
+                // check for error
+                if (data === -1) {
                     this.startGameError(this.localization("Network Error"));
                     return;
                 }
+                // check for content type
                 if (this.config.gameUrl instanceof File) {
                     this.config.gameUrl = this.config.gameUrl.name;
                 } else if (this.toData(this.config.gameUrl, true)) {
-                    this.config.gameUrl = "game";
+                    this.config.gameUrl = type.name.toLowerCase();
                 }
-                gotGameData(res.data);
-                const limit = (typeof this.config.cacheLimit === "number") ? this.config.cacheLimit : 1073741824;
-                if (parseFloat(res.headers["content-length"]) < limit && this.saveInBrowserSupported() && this.config.gameUrl !== "game") {
-                    this.storage.rom.put(this.config.gameUrl.split("/").pop(), {
-                        "content-length": res.headers["content-length"],
-                        data: res.data
-                    })
+
+                returnData = data.data;
+            }
+
+            if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Downloaded content:", returnData);
+
+            const writeFilesToFS = (fileName, fileData) => {
+                if (fileName.includes("/")) {
+                    const paths = fileName.split("/");
+                    let cp = "";
+                    for (let i = 0; i < paths.length - 1; i++) {
+                        if (paths[i] === "") continue;
+                        cp += `/${paths[i]}`;
+                        if (!this.gameManager.FS.analyzePath(cp).exists) {
+                            this.gameManager.FS.mkdir(cp);
+                        }
+                    }
+                }
+                if (fileName.endsWith("/")) {
+                    this.gameManager.FS.mkdir(fileName);
+                    return null;
+                }
+                this.gameManager.FS.writeFile(`/${fileName}`, fileData);
+                return fileName;
+            };
+
+            // extract to the file system
+            if (returnData && returnData.files) {
+                for (let i = 0; i < returnData.files.length; i++) {
+                    writeFilesToFS(returnData.files[i].filename, returnData.files[i].bytes)
                 }
             }
 
-            if (!this.debug) {
-                this.downloadFile(this.config.gameUrl, null, true, { method: "HEAD" }).then(async (res) => {
-                    const name = (typeof this.config.gameUrl === "string") ? this.config.gameUrl.split("/").pop() : "game";
-                    const result = await this.storage.rom.get(name);
-                    if (result && result["content-length"] === res.headers["content-length"] && name !== "game") {
-                        gotGameData(result.data);
-                        return;
-                    }
-                    downloadFile();
-                })
-            } else {
-                downloadFile();
-            }
-        })
+            resolve(returnData);
+        });
     }
+    /**
+     * Initialize GameManager and load external files and file systems
+     */
+    async initializeGameManager() {
+        this.gameManager = new window.EJS_GameManager(this.Module, this);
+        await this.gameManager.loadExternalFiles();
+        await this.gameManager.mountFileSystems();
+        this.callEvent("saveDatabaseLoaded", this.gameManager.FS);
+        if (this.getCore() === "ppsspp") {
+            await this.gameManager.loadPpssppAssets();
+        }
+    }
+
+    /**
+     * Determine CUE file handling settings based on core type and configuration
+     */
+    determineCueSettings() {
+        const coresThatNeedCueHandling = ["pcsx_rearmed", "genesis_plus_gx", "picodrive", "mednafen_pce", "smsplus", "vice_x64", "vice_x64sc", "vice_x128", "vice_xvic", "vice_xpet", "puae"];
+        let disableCue = false;
+
+        if (coresThatNeedCueHandling.includes(this.getCore()) && this.config.disableCue === undefined) {
+            disableCue = true;
+        } else {
+            disableCue = this.config.disableCue;
+        }
+
+        if (this.debug) console.log("Disable CUE handling:", disableCue);
+        return disableCue;
+    }
+
+    /**
+     * Check if extension is supported by the current core
+     */
+    supportsExtension(ext) {
+        if (!this.extensions) return false;
+        return this.extensions.includes(ext);
+    }
+
+    /**
+     * Select the most appropriate ROM file from available files
+     */
+    selectRomFile(fileNames, coreName) {
+        const cueGenerationCores = ["mednafen_psx_hw"];
+        const prioritizeExtensions = ["cue", "ccd", "toc", "m3u"];
+
+        let createCueFile = cueGenerationCores.includes(this.getCore());
+        if (this.determineCueSettings()) {
+            createCueFile = false;
+        }
+
+        let isoFile = null;
+        let supportedFile = null;
+        let cueFile = null;
+
+        fileNames.forEach(fileName => {
+            const ext = fileName.split(".").pop().toLowerCase();
+            if (supportedFile === null && this.supportsExtension(ext)) {
+                supportedFile = fileName;
+            }
+            if (isoFile === null && ["iso", "cso", "chd", "elf"].includes(ext)) {
+                isoFile = fileName;
+            }
+            if (prioritizeExtensions.includes(ext)) {
+                const currentCueExt = (cueFile === null) ? null : cueFile.split(".").pop().toLowerCase();
+                if (coreName === "psx") {
+                    // Always prefer m3u files for psx cores
+                    if (currentCueExt !== "m3u") {
+                        if (cueFile === null || ext === "m3u") {
+                            cueFile = fileName;
+                        }
+                    }
+                } else {
+                    const priority = ["cue", "ccd"]
+                    // Prefer cue or ccd files over toc or m3u
+                    if (!priority.includes(currentCueExt)) {
+                        if (cueFile === null || priority.includes(ext)) {
+                            cueFile = fileName;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Set the primary file selection with priority order
+        if (supportedFile !== null) {
+            this.fileName = supportedFile;
+        } else {
+            this.fileName = fileNames[0];
+        }
+
+        // ISO files take priority if supported
+        if (isoFile !== null && this.supportsExtension(isoFile.split(".").pop().toLowerCase())) {
+            this.fileName = isoFile;
+        }
+
+        // CUE/CCD files take priority if supported, or create a CUE file if needed
+        if (cueFile !== null && this.supportsExtension(cueFile.split(".").pop().toLowerCase())) {
+            this.fileName = cueFile;
+        } else if (createCueFile && this.supportsExtension("m3u") && this.supportsExtension("cue")) {
+            this.fileName = this.gameManager.createCueFile(fileNames);
+        }
+
+        // Special handling for DOS
+        if (this.getCore(true) === "dos" && !this.config.disableBatchBootup) {
+            this.fileName = this.gameManager.writeBootupBatchFile();
+        }
+    }
+
+    /**
+     * Extract file names from downloaded ROM data and start game
+     */
+    startGameFromDownload(romData) {
+        const fileNames = [];
+        for (const file of romData.files) {
+            if (file.filename.endsWith("/")) {
+                continue;
+            }
+            fileNames.push(file.filename);
+        }
+        this.selectRomFile(fileNames, this.getCore());
+        this.startGame();
+    }
+
+    /**
+     * Download all necessary files and start the game
+     */
     downloadFiles() {
         (async () => {
-            this.gameManager = new window.EJS_GameManager(this.Module, this);
-            await this.gameManager.loadExternalFiles();
-            await this.gameManager.mountFileSystems();
-            this.callEvent("saveDatabaseLoaded", this.gameManager.FS);
-            if (this.getCore() === "ppsspp") {
-                await this.gameManager.loadPpssppAssets();
-            }
-            await this.downloadRom();
-            await this.downloadBios();
+            await this.initializeGameManager();
+            
+            const romData = await this.download(this.config.gameUrl, this.downloadType.rom);
+            await this.download(this.config.biosUrl, this.downloadType.bios);
             await this.downloadStartState();
-            await this.downloadGameParent();
-            await this.downloadGamePatch();
-            this.startGame();
+            await this.download(this.config.gameParentUrl, this.downloadType.parent);
+            await this.download(this.config.gamePatchUrl, this.downloadType.patch);
+
+            this.determineCueSettings();
+            this.startGameFromDownload(romData);
         })();
     }
     initModule(wasmData, threadData) {
@@ -1027,6 +1268,12 @@ class EmulatorJS {
                 //Safari is --- funny
                 this.checkStarted();
             }
+
+            // debug list directory structure
+            if (this.debug && this.gameManager && this.gameManager.FS) {
+                console.log("File system directory");
+                this.gameManager.listDir("/");
+            }
         } catch(e) {
             console.warn("Failed to start game", e);
             this.startGameError(this.localization("Failed to start game"));
@@ -1074,7 +1321,7 @@ class EmulatorJS {
             if (document.activeElement !== this.elements.parent && this.config.noAutoFocus !== true) this.elements.parent.focus();
         })
         this.addEventListener(window, "resize", this.handleResize.bind(this));
-        //this.addEventListener(window, "blur", e => console.log(e), true); //TODO - add "click to make keyboard keys work" message?
+        this.addEventListener(window, "blur", () => this.stopAllAutofire());
 
         let counter = 0;
         this.elements.statePopupPanel = this.createPopup("", {}, true);
@@ -1090,6 +1337,11 @@ class EmulatorJS {
             }, 0);
         });
         this.addEventListener(window, "beforeunload", (e) => {
+            if (this.config.disableAutoUnload) {
+                e.preventDefault();
+                e.returnValue = "";
+                return
+            } 
             if (!this.started) return;
             this.callEvent("exit");
         });
@@ -1202,132 +1454,133 @@ class EmulatorJS {
             elem.appendChild(elm);
         }
     }
-    defaultButtonOptions = {
-        playPause: {
-            visible: true,
-            icon: "play",
-            displayName: "Play/Pause"
-        },
-        play: {
-            visible: true,
-            icon: '<svg viewBox="0 0 320 512"><path d="M361 215C375.3 223.8 384 239.3 384 256C384 272.7 375.3 288.2 361 296.1L73.03 472.1C58.21 482 39.66 482.4 24.52 473.9C9.377 465.4 0 449.4 0 432V80C0 62.64 9.377 46.63 24.52 38.13C39.66 29.64 58.21 29.99 73.03 39.04L361 215z"/></svg>',
-            displayName: "Play"
-        },
-        pause: {
-            visible: true,
-            icon: '<svg viewBox="0 0 320 512"><path d="M272 63.1l-32 0c-26.51 0-48 21.49-48 47.1v288c0 26.51 21.49 48 48 48L272 448c26.51 0 48-21.49 48-48v-288C320 85.49 298.5 63.1 272 63.1zM80 63.1l-32 0c-26.51 0-48 21.49-48 48v288C0 426.5 21.49 448 48 448l32 0c26.51 0 48-21.49 48-48v-288C128 85.49 106.5 63.1 80 63.1z"/></svg>',
-            displayName: "Pause"
-        },
-        restart: {
-            visible: true,
-            icon: '<svg viewBox="0 0 512 512"><path d="M496 48V192c0 17.69-14.31 32-32 32H320c-17.69 0-32-14.31-32-32s14.31-32 32-32h63.39c-29.97-39.7-77.25-63.78-127.6-63.78C167.7 96.22 96 167.9 96 256s71.69 159.8 159.8 159.8c34.88 0 68.03-11.03 95.88-31.94c14.22-10.53 34.22-7.75 44.81 6.375c10.59 14.16 7.75 34.22-6.375 44.81c-39.03 29.28-85.36 44.86-134.2 44.86C132.5 479.9 32 379.4 32 256s100.5-223.9 223.9-223.9c69.15 0 134 32.47 176.1 86.12V48c0-17.69 14.31-32 32-32S496 30.31 496 48z"/></svg>',
-            displayName: "Restart"
-        },
-        mute: {
-            visible: true,
-            icon: '<svg viewBox="0 0 640 512"><path d="M412.6 182c-10.28-8.334-25.41-6.867-33.75 3.402c-8.406 10.24-6.906 25.35 3.375 33.74C393.5 228.4 400 241.8 400 255.1c0 14.17-6.5 27.59-17.81 36.83c-10.28 8.396-11.78 23.5-3.375 33.74c4.719 5.806 11.62 8.802 18.56 8.802c5.344 0 10.75-1.779 15.19-5.399C435.1 311.5 448 284.6 448 255.1S435.1 200.4 412.6 182zM473.1 108.2c-10.22-8.334-25.34-6.898-33.78 3.34c-8.406 10.24-6.906 25.35 3.344 33.74C476.6 172.1 496 213.3 496 255.1s-19.44 82.1-53.31 110.7c-10.25 8.396-11.75 23.5-3.344 33.74c4.75 5.775 11.62 8.771 18.56 8.771c5.375 0 10.75-1.779 15.22-5.431C518.2 366.9 544 313 544 255.1S518.2 145 473.1 108.2zM534.4 33.4c-10.22-8.334-25.34-6.867-33.78 3.34c-8.406 10.24-6.906 25.35 3.344 33.74C559.9 116.3 592 183.9 592 255.1s-32.09 139.7-88.06 185.5c-10.25 8.396-11.75 23.5-3.344 33.74C505.3 481 512.2 484 519.2 484c5.375 0 10.75-1.779 15.22-5.431C601.5 423.6 640 342.5 640 255.1S601.5 88.34 534.4 33.4zM301.2 34.98c-11.5-5.181-25.01-3.076-34.43 5.29L131.8 160.1H48c-26.51 0-48 21.48-48 47.96v95.92c0 26.48 21.49 47.96 48 47.96h83.84l134.9 119.8C272.7 477 280.3 479.8 288 479.8c4.438 0 8.959-.9314 13.16-2.835C312.7 471.8 320 460.4 320 447.9V64.12C320 51.55 312.7 40.13 301.2 34.98z"/></svg>',
-            displayName: "Mute"
-        },
-        unmute: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M301.2 34.85c-11.5-5.188-25.02-3.122-34.44 5.253L131.8 160H48c-26.51 0-48 21.49-48 47.1v95.1c0 26.51 21.49 47.1 48 47.1h83.84l134.9 119.9c5.984 5.312 13.58 8.094 21.26 8.094c4.438 0 8.972-.9375 13.17-2.844c11.5-5.156 18.82-16.56 18.82-29.16V64C319.1 51.41 312.7 40 301.2 34.85zM513.9 255.1l47.03-47.03c9.375-9.375 9.375-24.56 0-33.94s-24.56-9.375-33.94 0L480 222.1L432.1 175c-9.375-9.375-24.56-9.375-33.94 0s-9.375 24.56 0 33.94l47.03 47.03l-47.03 47.03c-9.375 9.375-9.375 24.56 0 33.94c9.373 9.373 24.56 9.381 33.94 0L480 289.9l47.03 47.03c9.373 9.373 24.56 9.381 33.94 0c9.375-9.375 9.375-24.56 0-33.94L513.9 255.1z"/></svg>',
-            displayName: "Unmute"
-        },
-        settings: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M495.9 166.6C499.2 175.2 496.4 184.9 489.6 191.2L446.3 230.6C447.4 238.9 448 247.4 448 256C448 264.6 447.4 273.1 446.3 281.4L489.6 320.8C496.4 327.1 499.2 336.8 495.9 345.4C491.5 357.3 486.2 368.8 480.2 379.7L475.5 387.8C468.9 398.8 461.5 409.2 453.4 419.1C447.4 426.2 437.7 428.7 428.9 425.9L373.2 408.1C359.8 418.4 344.1 427 329.2 433.6L316.7 490.7C314.7 499.7 307.7 506.1 298.5 508.5C284.7 510.8 270.5 512 255.1 512C241.5 512 227.3 510.8 213.5 508.5C204.3 506.1 197.3 499.7 195.3 490.7L182.8 433.6C167 427 152.2 418.4 138.8 408.1L83.14 425.9C74.3 428.7 64.55 426.2 58.63 419.1C50.52 409.2 43.12 398.8 36.52 387.8L31.84 379.7C25.77 368.8 20.49 357.3 16.06 345.4C12.82 336.8 15.55 327.1 22.41 320.8L65.67 281.4C64.57 273.1 64 264.6 64 256C64 247.4 64.57 238.9 65.67 230.6L22.41 191.2C15.55 184.9 12.82 175.3 16.06 166.6C20.49 154.7 25.78 143.2 31.84 132.3L36.51 124.2C43.12 113.2 50.52 102.8 58.63 92.95C64.55 85.8 74.3 83.32 83.14 86.14L138.8 103.9C152.2 93.56 167 84.96 182.8 78.43L195.3 21.33C197.3 12.25 204.3 5.04 213.5 3.51C227.3 1.201 241.5 0 256 0C270.5 0 284.7 1.201 298.5 3.51C307.7 5.04 314.7 12.25 316.7 21.33L329.2 78.43C344.1 84.96 359.8 93.56 373.2 103.9L428.9 86.14C437.7 83.32 447.4 85.8 453.4 92.95C461.5 102.8 468.9 113.2 475.5 124.2L480.2 132.3C486.2 143.2 491.5 154.7 495.9 166.6V166.6zM256 336C300.2 336 336 300.2 336 255.1C336 211.8 300.2 175.1 256 175.1C211.8 175.1 176 211.8 176 255.1C176 300.2 211.8 336 256 336z"/></svg>',
-            displayName: "Settings"
-        },
-        fullscreen: {
-            visible: true,
-            icon: "fullscreen",
-            displayName: "Fullscreen"
-        },
-        enterFullscreen: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M208 281.4c-12.5-12.5-32.76-12.5-45.26-.002l-78.06 78.07l-30.06-30.06c-6.125-6.125-14.31-9.367-22.63-9.367c-4.125 0-8.279 .7891-12.25 2.43c-11.97 4.953-19.75 16.62-19.75 29.56v135.1C.0013 501.3 10.75 512 24 512h136c12.94 0 24.63-7.797 29.56-19.75c4.969-11.97 2.219-25.72-6.938-34.87l-30.06-30.06l78.06-78.07c12.5-12.49 12.5-32.75 .002-45.25L208 281.4zM487.1 0h-136c-12.94 0-24.63 7.797-29.56 19.75c-4.969 11.97-2.219 25.72 6.938 34.87l30.06 30.06l-78.06 78.07c-12.5 12.5-12.5 32.76 0 45.26l22.62 22.62c12.5 12.5 32.76 12.5 45.26 0l78.06-78.07l30.06 30.06c9.156 9.141 22.87 11.84 34.87 6.937C504.2 184.6 512 172.9 512 159.1V23.1C512 10.74 501.3 0 487.1 0z"/></svg>',
-            displayName: "Enter Fullscreen"
-        },
-        exitFullscreen: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M215.1 272h-136c-12.94 0-24.63 7.797-29.56 19.75C45.47 303.7 48.22 317.5 57.37 326.6l30.06 30.06l-78.06 78.07c-12.5 12.5-12.5 32.75-.0012 45.25l22.62 22.62c12.5 12.5 32.76 12.5 45.26 .0013l78.06-78.07l30.06 30.06c6.125 6.125 14.31 9.367 22.63 9.367c4.125 0 8.279-.7891 12.25-2.43c11.97-4.953 19.75-16.62 19.75-29.56V296C239.1 282.7 229.3 272 215.1 272zM296 240h136c12.94 0 24.63-7.797 29.56-19.75c4.969-11.97 2.219-25.72-6.938-34.87l-30.06-30.06l78.06-78.07c12.5-12.5 12.5-32.76 .0002-45.26l-22.62-22.62c-12.5-12.5-32.76-12.5-45.26-.0003l-78.06 78.07l-30.06-30.06c-9.156-9.141-22.87-11.84-34.87-6.937c-11.97 4.953-19.75 16.62-19.75 29.56v135.1C272 229.3 282.7 240 296 240z"/></svg>',
-            displayName: "Exit Fullscreen"
-        },
-        saveState: {
-            visible: true,
-            icon: '<svg viewBox="0 0 448 512"><path fill="currentColor" d="M433.941 129.941l-83.882-83.882A48 48 0 0 0 316.118 32H48C21.49 32 0 53.49 0 80v352c0 26.51 21.49 48 48 48h352c26.51 0 48-21.49 48-48V163.882a48 48 0 0 0-14.059-33.941zM224 416c-35.346 0-64-28.654-64-64 0-35.346 28.654-64 64-64s64 28.654 64 64c0 35.346-28.654 64-64 64zm96-304.52V212c0 6.627-5.373 12-12 12H76c-6.627 0-12-5.373-12-12V108c0-6.627 5.373-12 12-12h228.52c3.183 0 6.235 1.264 8.485 3.515l3.48 3.48A11.996 11.996 0 0 1 320 111.48z"/></svg>',
-            displayName: "Save State"
-        },
-        loadState: {
-            visible: true,
-            icon: '<svg viewBox="0 0 576 512"><path fill="currentColor" d="M572.694 292.093L500.27 416.248A63.997 63.997 0 0 1 444.989 448H45.025c-18.523 0-30.064-20.093-20.731-36.093l72.424-124.155A64 64 0 0 1 152 256h399.964c18.523 0 30.064 20.093 20.73 36.093zM152 224h328v-48c0-26.51-21.49-48-48-48H272l-64-64H48C21.49 64 0 85.49 0 112v278.046l69.077-118.418C86.214 242.25 117.989 224 152 224z"/></svg>',
-            displayName: "Load State"
-        },
-        screenRecord: {
-            visible: true
-        },
-        gamepad: {
-            visible: true,
-            icon: '<svg viewBox="0 0 640 512"><path fill="currentColor" d="M480 96H160C71.6 96 0 167.6 0 256s71.6 160 160 160c44.8 0 85.2-18.4 114.2-48h91.5c29 29.6 69.5 48 114.2 48 88.4 0 160-71.6 160-160S568.4 96 480 96zM256 276c0 6.6-5.4 12-12 12h-52v52c0 6.6-5.4 12-12 12h-40c-6.6 0-12-5.4-12-12v-52H76c-6.6 0-12-5.4-12-12v-40c0-6.6 5.4-12 12-12h52v-52c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h52c6.6 0 12 5.4 12 12v40zm184 68c-26.5 0-48-21.5-48-48s21.5-48 48-48 48 21.5 48 48-21.5 48-48 48zm80-80c-26.5 0-48-21.5-48-48s21.5-48 48-48 48 21.5 48 48-21.5 48-48 48z"/></svg>',
-            displayName: "Control Settings"
-        },
-        cheat: {
-            visible: true,
-            icon: '<svg viewBox="0 0 496 512"><path fill="currentColor" d="M248 8C111 8 0 119 0 256s111 248 248 248 248-111 248-248S385 8 248 8zm0 448c-110.3 0-200-89.7-200-200S137.7 56 248 56s200 89.7 200 200-89.7 200-200 200zm-80-216c17.7 0 32-14.3 32-32s-14.3-32-32-32-32 14.3-32 32 14.3 32 32 32zm160 0c17.7 0 32-14.3 32-32s-14.3-32-32-32-32 14.3-32 32 14.3 32 32 32zm4 72.6c-20.8 25-51.5 39.4-84 39.4s-63.2-14.3-84-39.4c-8.5-10.2-23.7-11.5-33.8-3.1-10.2 8.5-11.5 23.6-3.1 33.8 30 36 74.1 56.6 120.9 56.6s90.9-20.6 120.9-56.6c8.5-10.2 7.1-25.3-3.1-33.8-10.1-8.4-25.3-7.1-33.8 3.1z" class=""></path></svg>',
-            displayName: "Cheats"
-        },
-        volumeSlider: {
-            visible: true
-        },
-        saveSavFiles: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 23 23"><path d="M3 6.5V5C3 3.89543 3.89543 3 5 3H16.1716C16.702 3 17.2107 3.21071 17.5858 3.58579L20.4142 6.41421C20.7893 6.78929 21 7.29799 21 7.82843V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M8 3H16V8.4C16 8.73137 15.7314 9 15.4 9H8.6C8.26863 9 8 8.73137 8 8.4V3Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M18 21V13.6C18 13.2686 17.7314 13 17.4 13H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M6 21V17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M12 12H1M1 12L4 9M1 12L4 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
-            displayName: "Export Save File"
-        },
-        loadSavFiles: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 23 23"><path d="M3 7.5V5C3 3.89543 3.89543 3 5 3H16.1716C16.702 3 17.2107 3.21071 17.5858 3.58579L20.4142 6.41421C20.7893 6.78929 21 7.29799 21 7.82843V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V16.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M6 21V17" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18 21V13.6C18 13.2686 17.7314 13 17.4 13H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M16 3V8.4C16 8.73137 15.7314 9 15.4 9H13.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M8 3V6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M1 12H12M12 12L9 9M12 12L9 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
-            displayName: "Import Save File"
-        },
-        quickSave: {
-            visible: true
-        },
-        quickLoad: {
-            visible: true
-        },
-        screenshot: {
-            visible: true
-        },
-        cacheManager: {
-            visible: true,
-            icon: '<svg viewBox="0 0 1800 1800"><path d="M896 768q237 0 443-43t325-127v170q0 69-103 128t-280 93.5-385 34.5-385-34.5T231 896 128 768V598q119 84 325 127t443 43zm0 768q237 0 443-43t325-127v170q0 69-103 128t-280 93.5-385 34.5-385-34.5-280-93.5-103-128v-170q119 84 325 127t443 43zm0-384q237 0 443-43t325-127v170q0 69-103 128t-280 93.5-385 34.5-385-34.5-280-93.5-103-128V982q119 84 325 127t443 43zM896 0q208 0 385 34.5t280 93.5 103 128v128q0 69-103 128t-280 93.5T896 640t-385-34.5T231 512 128 384V256q0-69 103-128t280-93.5T896 0z"/></svg>',
-            displayName: "Cache Manager"
-        },
-        exitEmulation: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 460"><path style="fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke:rgb(255,255,255);stroke-opacity:1;stroke-miterlimit:4;" d="M 14.000061 7.636414 L 14.000061 4.5 C 14.000061 4.223877 13.776123 3.999939 13.5 3.999939 L 4.5 3.999939 C 4.223877 3.999939 3.999939 4.223877 3.999939 4.5 L 3.999939 19.5 C 3.999939 19.776123 4.223877 20.000061 4.5 20.000061 L 13.5 20.000061 C 13.776123 20.000061 14.000061 19.776123 14.000061 19.5 L 14.000061 16.363586 " transform="matrix(21.333333,0,0,21.333333,0,0)"/><path style="fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke:rgb(255,255,255);stroke-opacity:1;stroke-miterlimit:4;" d="M 9.999939 12 L 21 12 M 21 12 L 18.000366 8.499939 M 21 12 L 18 15.500061 " transform="matrix(21.333333,0,0,21.333333,0,0)"/></svg>',
-            displayName: "Exit Emulation"
-        },
-        netplay: {
-            visible: false,
-            icon: '<svg viewBox="0 0 512 512"><path fill="currentColor" d="M364.215 192h131.43c5.439 20.419 8.354 41.868 8.354 64s-2.915 43.581-8.354 64h-131.43c5.154-43.049 4.939-86.746 0-128zM185.214 352c10.678 53.68 33.173 112.514 70.125 151.992.221.001.44.008.661.008s.44-.008.661-.008c37.012-39.543 59.467-98.414 70.125-151.992H185.214zm174.13-192h125.385C452.802 84.024 384.128 27.305 300.95 12.075c30.238 43.12 48.821 96.332 58.394 147.925zm-27.35 32H180.006c-5.339 41.914-5.345 86.037 0 128h151.989c5.339-41.915 5.345-86.037-.001-128zM152.656 352H27.271c31.926 75.976 100.6 132.695 183.778 147.925-30.246-43.136-48.823-96.35-58.393-147.925zm206.688 0c-9.575 51.605-28.163 104.814-58.394 147.925 83.178-15.23 151.852-71.949 183.778-147.925H359.344zm-32.558-192c-10.678-53.68-33.174-112.514-70.125-151.992-.221 0-.44-.008-.661-.008s-.44.008-.661.008C218.327 47.551 195.872 106.422 185.214 160h141.572zM16.355 192C10.915 212.419 8 233.868 8 256s2.915 43.581 8.355 64h131.43c-4.939-41.254-5.154-84.951 0-128H16.355zm136.301-32c9.575-51.602 28.161-104.81 58.394-147.925C127.872 27.305 59.198 84.024 27.271 160h125.385z"/></svg>',
-            displayName: "Netplay"
-        },
-        diskButton: {
-            visible: true,
-            icon: '<svg fill="#FFFFFF" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 473.109 473.109"><path d="M340.963,101.878H12.105C5.423,101.878,0,107.301,0,113.983v328.862c0,6.68,5.423,12.105,12.105,12.105h328.857 c6.685,0,12.104-5.426,12.104-12.105V113.983C353.067,107.301,347.647,101.878,340.963,101.878z M67.584,120.042h217.895v101.884 H67.584V120.042z M296.076,429.228H56.998V278.414h239.079V429.228z M223.947,135.173h30.269v72.638h-30.269V135.173z M274.13,315.741H78.933v-12.105H274.13V315.741z M274.13,358.109H78.933v-12.105H274.13V358.109z M274.13,398.965H78.933v-12.105 H274.13V398.965z M473.109,30.263v328.863c0,6.68-5.426,12.105-12.105,12.105H384.59v-25.724h31.528V194.694H384.59v-56.489h20.93 V36.321H187.625v43.361h-67.583v-49.42c0-6.682,5.423-12.105,12.105-12.105H461.01C467.695,18.158,473.109,23.581,473.109,30.263z M343.989,51.453h30.269v31.321c-3.18-1.918-6.868-3.092-10.853-3.092h-19.416V51.453z M394.177,232.021h-9.581v-12.105h9.581 V232.021z M384.59,262.284h9.581v12.105h-9.581V262.284z M384.59,303.14h9.581v12.104h-9.581V303.14z"/></svg>',
-            displayName: "Disks"
-        },
-        contextMenu: {
-            visible: true,
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--!Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2023 Fonticons, Inc.--><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg>',
-            displayName: "Context Menu"
-        }
-    };
-    defaultButtonAliases = {
-        volume: "volumeSlider"
-    };
     buildButtonOptions(buttonUserOpts) {
+        this.defaultButtonOptions = {
+            playPause: {
+                visible: true,
+                icon: "play",
+                displayName: "Play/Pause"
+            },
+            play: {
+                visible: true,
+                icon: '<svg viewBox="0 0 320 512"><path d="M361 215C375.3 223.8 384 239.3 384 256C384 272.7 375.3 288.2 361 296.1L73.03 472.1C58.21 482 39.66 482.4 24.52 473.9C9.377 465.4 0 449.4 0 432V80C0 62.64 9.377 46.63 24.52 38.13C39.66 29.64 58.21 29.99 73.03 39.04L361 215z"/></svg>',
+                displayName: "Play"
+            },
+            pause: {
+                visible: true,
+                icon: '<svg viewBox="0 0 320 512"><path d="M272 63.1l-32 0c-26.51 0-48 21.49-48 47.1v288c0 26.51 21.49 48 48 48L272 448c26.51 0 48-21.49 48-48v-288C320 85.49 298.5 63.1 272 63.1zM80 63.1l-32 0c-26.51 0-48 21.49-48 48v288C0 426.5 21.49 448 48 448l32 0c26.51 0 48-21.49 48-48v-288C128 85.49 106.5 63.1 80 63.1z"/></svg>',
+                displayName: "Pause"
+            },
+            restart: {
+                visible: true,
+                icon: '<svg viewBox="0 0 512 512"><path d="M496 48V192c0 17.69-14.31 32-32 32H320c-17.69 0-32-14.31-32-32s14.31-32 32-32h63.39c-29.97-39.7-77.25-63.78-127.6-63.78C167.7 96.22 96 167.9 96 256s71.69 159.8 159.8 159.8c34.88 0 68.03-11.03 95.88-31.94c14.22-10.53 34.22-7.75 44.81 6.375c10.59 14.16 7.75 34.22-6.375 44.81c-39.03 29.28-85.36 44.86-134.2 44.86C132.5 479.9 32 379.4 32 256s100.5-223.9 223.9-223.9c69.15 0 134 32.47 176.1 86.12V48c0-17.69 14.31-32 32-32S496 30.31 496 48z"/></svg>',
+                displayName: "Restart"
+            },
+            mute: {
+                visible: true,
+                icon: '<svg viewBox="0 0 640 512"><path d="M412.6 182c-10.28-8.334-25.41-6.867-33.75 3.402c-8.406 10.24-6.906 25.35 3.375 33.74C393.5 228.4 400 241.8 400 255.1c0 14.17-6.5 27.59-17.81 36.83c-10.28 8.396-11.78 23.5-3.375 33.74c4.719 5.806 11.62 8.802 18.56 8.802c5.344 0 10.75-1.779 15.19-5.399C435.1 311.5 448 284.6 448 255.1S435.1 200.4 412.6 182zM473.1 108.2c-10.22-8.334-25.34-6.898-33.78 3.34c-8.406 10.24-6.906 25.35 3.344 33.74C476.6 172.1 496 213.3 496 255.1s-19.44 82.1-53.31 110.7c-10.25 8.396-11.75 23.5-3.344 33.74c4.75 5.775 11.62 8.771 18.56 8.771c5.375 0 10.75-1.779 15.22-5.431C518.2 366.9 544 313 544 255.1S518.2 145 473.1 108.2zM534.4 33.4c-10.22-8.334-25.34-6.867-33.78 3.34c-8.406 10.24-6.906 25.35 3.344 33.74C559.9 116.3 592 183.9 592 255.1s-32.09 139.7-88.06 185.5c-10.25 8.396-11.75 23.5-3.344 33.74C505.3 481 512.2 484 519.2 484c5.375 0 10.75-1.779 15.22-5.431C601.5 423.6 640 342.5 640 255.1S601.5 88.34 534.4 33.4zM301.2 34.98c-11.5-5.181-25.01-3.076-34.43 5.29L131.8 160.1H48c-26.51 0-48 21.48-48 47.96v95.92c0 26.48 21.49 47.96 48 47.96h83.84l134.9 119.8C272.7 477 280.3 479.8 288 479.8c4.438 0 8.959-.9314 13.16-2.835C312.7 471.8 320 460.4 320 447.9V64.12C320 51.55 312.7 40.13 301.2 34.98z"/></svg>',
+                displayName: "Mute"
+            },
+            unmute: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M301.2 34.85c-11.5-5.188-25.02-3.122-34.44 5.253L131.8 160H48c-26.51 0-48 21.49-48 47.1v95.1c0 26.51 21.49 47.1 48 47.1h83.84l134.9 119.9c5.984 5.312 13.58 8.094 21.26 8.094c4.438 0 8.972-.9375 13.17-2.844c11.5-5.156 18.82-16.56 18.82-29.16V64C319.1 51.41 312.7 40 301.2 34.85zM513.9 255.1l47.03-47.03c9.375-9.375 9.375-24.56 0-33.94s-24.56-9.375-33.94 0L480 222.1L432.1 175c-9.375-9.375-24.56-9.375-33.94 0s-9.375 24.56 0 33.94l47.03 47.03l-47.03 47.03c-9.375 9.375-9.375 24.56 0 33.94c9.373 9.373 24.56 9.381 33.94 0L480 289.9l47.03 47.03c9.373 9.373 24.56 9.381 33.94 0c9.375-9.375 9.375-24.56 0-33.94L513.9 255.1z"/></svg>',
+                displayName: "Unmute"
+            },
+            settings: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M495.9 166.6C499.2 175.2 496.4 184.9 489.6 191.2L446.3 230.6C447.4 238.9 448 247.4 448 256C448 264.6 447.4 273.1 446.3 281.4L489.6 320.8C496.4 327.1 499.2 336.8 495.9 345.4C491.5 357.3 486.2 368.8 480.2 379.7L475.5 387.8C468.9 398.8 461.5 409.2 453.4 419.1C447.4 426.2 437.7 428.7 428.9 425.9L373.2 408.1C359.8 418.4 344.1 427 329.2 433.6L316.7 490.7C314.7 499.7 307.7 506.1 298.5 508.5C284.7 510.8 270.5 512 255.1 512C241.5 512 227.3 510.8 213.5 508.5C204.3 506.1 197.3 499.7 195.3 490.7L182.8 433.6C167 427 152.2 418.4 138.8 408.1L83.14 425.9C74.3 428.7 64.55 426.2 58.63 419.1C50.52 409.2 43.12 398.8 36.52 387.8L31.84 379.7C25.77 368.8 20.49 357.3 16.06 345.4C12.82 336.8 15.55 327.1 22.41 320.8L65.67 281.4C64.57 273.1 64 264.6 64 256C64 247.4 64.57 238.9 65.67 230.6L22.41 191.2C15.55 184.9 12.82 175.3 16.06 166.6C20.49 154.7 25.78 143.2 31.84 132.3L36.51 124.2C43.12 113.2 50.52 102.8 58.63 92.95C64.55 85.8 74.3 83.32 83.14 86.14L138.8 103.9C152.2 93.56 167 84.96 182.8 78.43L195.3 21.33C197.3 12.25 204.3 5.04 213.5 3.51C227.3 1.201 241.5 0 256 0C270.5 0 284.7 1.201 298.5 3.51C307.7 5.04 314.7 12.25 316.7 21.33L329.2 78.43C344.1 84.96 359.8 93.56 373.2 103.9L428.9 86.14C437.7 83.32 447.4 85.8 453.4 92.95C461.5 102.8 468.9 113.2 475.5 124.2L480.2 132.3C486.2 143.2 491.5 154.7 495.9 166.6V166.6zM256 336C300.2 336 336 300.2 336 255.1C336 211.8 300.2 175.1 256 175.1C211.8 175.1 176 211.8 176 255.1C176 300.2 211.8 336 256 336z"/></svg>',
+                displayName: "Settings"
+            },
+            fullscreen: {
+                visible: true,
+                icon: "fullscreen",
+                displayName: "Fullscreen"
+            },
+            enterFullscreen: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M208 281.4c-12.5-12.5-32.76-12.5-45.26-.002l-78.06 78.07l-30.06-30.06c-6.125-6.125-14.31-9.367-22.63-9.367c-4.125 0-8.279 .7891-12.25 2.43c-11.97 4.953-19.75 16.62-19.75 29.56v135.1C.0013 501.3 10.75 512 24 512h136c12.94 0 24.63-7.797 29.56-19.75c4.969-11.97 2.219-25.72-6.938-34.87l-30.06-30.06l78.06-78.07c12.5-12.49 12.5-32.75 .002-45.25L208 281.4zM487.1 0h-136c-12.94 0-24.63 7.797-29.56 19.75c-4.969 11.97-2.219 25.72 6.938 34.87l30.06 30.06l-78.06 78.07c-12.5 12.5-12.5 32.76 0 45.26l22.62 22.62c12.5 12.5 32.76 12.5 45.26 0l78.06-78.07l30.06 30.06c9.156 9.141 22.87 11.84 34.87 6.937C504.2 184.6 512 172.9 512 159.1V23.1C512 10.74 501.3 0 487.1 0z"/></svg>',
+                displayName: "Enter Fullscreen"
+            },
+            exitFullscreen: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M215.1 272h-136c-12.94 0-24.63 7.797-29.56 19.75C45.47 303.7 48.22 317.5 57.37 326.6l30.06 30.06l-78.06 78.07c-12.5 12.5-12.5 32.75-.0012 45.25l22.62 22.62c12.5 12.5 32.76 12.5 45.26 .0013l78.06-78.07l30.06 30.06c6.125 6.125 14.31 9.367 22.63 9.367c4.125 0 8.279-.7891 12.25-2.43c11.97-4.953 19.75-16.62 19.75-29.56V296C239.1 282.7 229.3 272 215.1 272zM296 240h136c12.94 0 24.63-7.797 29.56-19.75c4.969-11.97 2.219-25.72-6.938-34.87l-30.06-30.06l78.06-78.07c12.5-12.5 12.5-32.76 .0002-45.26l-22.62-22.62c-12.5-12.5-32.76-12.5-45.26-.0003l-78.06 78.07l-30.06-30.06c-9.156-9.141-22.87-11.84-34.87-6.937c-11.97 4.953-19.75 16.62-19.75 29.56v135.1C272 229.3 282.7 240 296 240z"/></svg>',
+                displayName: "Exit Fullscreen"
+            },
+            saveState: {
+                visible: true,
+                icon: '<svg viewBox="0 0 448 512"><path fill="currentColor" d="M433.941 129.941l-83.882-83.882A48 48 0 0 0 316.118 32H48C21.49 32 0 53.49 0 80v352c0 26.51 21.49 48 48 48h352c26.51 0 48-21.49 48-48V163.882a48 48 0 0 0-14.059-33.941zM224 416c-35.346 0-64-28.654-64-64 0-35.346 28.654-64 64-64s64 28.654 64 64c0 35.346-28.654 64-64 64zm96-304.52V212c0 6.627-5.373 12-12 12H76c-6.627 0-12-5.373-12-12V108c0-6.627 5.373-12 12-12h228.52c3.183 0 6.235 1.264 8.485 3.515l3.48 3.48A11.996 11.996 0 0 1 320 111.48z"/></svg>',
+                displayName: "Save State"
+            },
+            loadState: {
+                visible: true,
+                icon: '<svg viewBox="0 0 576 512"><path fill="currentColor" d="M572.694 292.093L500.27 416.248A63.997 63.997 0 0 1 444.989 448H45.025c-18.523 0-30.064-20.093-20.731-36.093l72.424-124.155A64 64 0 0 1 152 256h399.964c18.523 0 30.064 20.093 20.73 36.093zM152 224h328v-48c0-26.51-21.49-48-48-48H272l-64-64H48C21.49 64 0 85.49 0 112v278.046l69.077-118.418C86.214 242.25 117.989 224 152 224z"/></svg>',
+                displayName: "Load State"
+            },
+            screenRecord: {
+                visible: true
+            },
+            gamepad: {
+                visible: true,
+                icon: '<svg viewBox="0 0 640 512"><path fill="currentColor" d="M480 96H160C71.6 96 0 167.6 0 256s71.6 160 160 160c44.8 0 85.2-18.4 114.2-48h91.5c29 29.6 69.5 48 114.2 48 88.4 0 160-71.6 160-160S568.4 96 480 96zM256 276c0 6.6-5.4 12-12 12h-52v52c0 6.6-5.4 12-12 12h-40c-6.6 0-12-5.4-12-12v-52H76c-6.6 0-12-5.4-12-12v-40c0-6.6 5.4-12 12-12h52v-52c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h52c6.6 0 12 5.4 12 12v40zm184 68c-26.5 0-48-21.5-48-48s21.5-48 48-48 48 21.5 48 48-21.5 48-48 48zm80-80c-26.5 0-48-21.5-48-48s21.5-48 48-48 48 21.5 48 48-21.5 48-48 48z"/></svg>',
+                displayName: "Control Settings"
+            },
+            cheat: {
+                visible: true,
+                icon: '<svg viewBox="0 0 496 512"><path fill="currentColor" d="M248 8C111 8 0 119 0 256s111 248 248 248 248-111 248-248S385 8 248 8zm0 448c-110.3 0-200-89.7-200-200S137.7 56 248 56s200 89.7 200 200-89.7 200-200 200zm-80-216c17.7 0 32-14.3 32-32s-14.3-32-32-32-32 14.3-32 32 14.3 32 32 32zm160 0c17.7 0 32-14.3 32-32s-14.3-32-32-32-32 14.3-32 32 14.3 32 32 32zm4 72.6c-20.8 25-51.5 39.4-84 39.4s-63.2-14.3-84-39.4c-8.5-10.2-23.7-11.5-33.8-3.1-10.2 8.5-11.5 23.6-3.1 33.8 30 36 74.1 56.6 120.9 56.6s90.9-20.6 120.9-56.6c8.5-10.2 7.1-25.3-3.1-33.8-10.1-8.4-25.3-7.1-33.8 3.1z" class=""></path></svg>',
+                displayName: "Cheats"
+            },
+            volumeSlider: {
+                visible: true
+            },
+            saveSavFiles: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 23 23"><path d="M3 6.5V5C3 3.89543 3.89543 3 5 3H16.1716C16.702 3 17.2107 3.21071 17.5858 3.58579L20.4142 6.41421C20.7893 6.78929 21 7.29799 21 7.82843V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M8 3H16V8.4C16 8.73137 15.7314 9 15.4 9H8.6C8.26863 9 8 8.73137 8 8.4V3Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M18 21V13.6C18 13.2686 17.7314 13 17.4 13H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M6 21V17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M12 12H1M1 12L4 9M1 12L4 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+                displayName: "Export Save File"
+            },
+            loadSavFiles: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 23 23"><path d="M3 7.5V5C3 3.89543 3.89543 3 5 3H16.1716C16.702 3 17.2107 3.21071 17.5858 3.58579L20.4142 6.41421C20.7893 6.78929 21 7.29799 21 7.82843V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V16.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M6 21V17" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18 21V13.6C18 13.2686 17.7314 13 17.4 13H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M16 3V8.4C16 8.73137 15.7314 9 15.4 9H13.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="transparent"></path><path d="M8 3V6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M1 12H12M12 12L9 9M12 12L9 15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+                displayName: "Import Save File"
+            },
+            quickSave: {
+                visible: true
+            },
+            quickLoad: {
+                visible: true
+            },
+            screenshot: {
+                visible: true
+            },
+            cacheManager: {
+                visible: true,
+                icon: '<svg viewBox="0 0 1800 1800"><path d="M896 768q237 0 443-43t325-127v170q0 69-103 128t-280 93.5-385 34.5-385-34.5T231 896 128 768V598q119 84 325 127t443 43zm0 768q237 0 443-43t325-127v170q0 69-103 128t-280 93.5-385 34.5-385-34.5-280-93.5-103-128v-170q119 84 325 127t443 43zm0-384q237 0 443-43t325-127v170q0 69-103 128t-280 93.5-385 34.5-385-34.5-280-93.5-103-128V982q119 84 325 127t443 43zM896 0q208 0 385 34.5t280 93.5 103 128v128q0 69-103 128t-280 93.5T896 640t-385-34.5T231 512 128 384V256q0-69 103-128t280-93.5T896 0z"/></svg>',
+                displayName: "Cache Manager"
+            },
+            exitEmulation: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 460"><path style="fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke:rgb(255,255,255);stroke-opacity:1;stroke-miterlimit:4;" d="M 14.000061 7.636414 L 14.000061 4.5 C 14.000061 4.223877 13.776123 3.999939 13.5 3.999939 L 4.5 3.999939 C 4.223877 3.999939 3.999939 4.223877 3.999939 4.5 L 3.999939 19.5 C 3.999939 19.776123 4.223877 20.000061 4.5 20.000061 L 13.5 20.000061 C 13.776123 20.000061 14.000061 19.776123 14.000061 19.5 L 14.000061 16.363586 " transform="matrix(21.333333,0,0,21.333333,0,0)"/><path style="fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke:rgb(255,255,255);stroke-opacity:1;stroke-miterlimit:4;" d="M 9.999939 12 L 21 12 M 21 12 L 18.000366 8.499939 M 21 12 L 18 15.500061 " transform="matrix(21.333333,0,0,21.333333,0,0)"/></svg>',
+                displayName: "Exit Emulation"
+            },
+            netplay: {
+                visible: true,
+                icon: '<svg viewBox="0 0 512 512"><path fill="currentColor" d="M364.215 192h131.43c5.439 20.419 8.354 41.868 8.354 64s-2.915 43.581-8.354 64h-131.43c5.154-43.049 4.939-86.746 0-128zM185.214 352c10.678 53.68 33.173 112.514 70.125 151.992.221.001.44.008.661.008s.44-.008.661-.008c37.012-39.543 59.467-98.414 70.125-151.992H185.214zm174.13-192h125.385C452.802 84.024 384.128 27.305 300.95 12.075c30.238 43.12 48.821 96.332 58.394 147.925zm-27.35 32H180.006c-5.339 41.914-5.345 86.037 0 128h151.989c5.339-41.915 5.345-86.037-.001-128zM152.656 352H27.271c31.926 75.976 100.6 132.695 183.778 147.925-30.246-43.136-48.823-96.35-58.393-147.925zm206.688 0c-9.575 51.605-28.163 104.814-58.394 147.925 83.178-15.23 151.852-71.949 183.778-147.925H359.344zm-32.558-192c-10.678-53.68-33.174-112.514-70.125-151.992-.221 0-.44-.008-.661-.008s-.44.008-.661.008C218.327 47.551 195.872 106.422 185.214 160h141.572zM16.355 192C10.915 212.419 8 233.868 8 256s2.915 43.581 8.355 64h131.43c-4.939-41.254-5.154-84.951 0-128H16.355zm136.301-32c9.575-51.602 28.161-104.81 58.394-147.925C127.872 27.305 59.198 84.024 27.271 160h125.385z"/></svg>',
+                displayName: "Netplay"
+            },
+            diskButton: {
+                visible: true,
+                icon: '<svg fill="#FFFFFF" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 473.109 473.109"><path d="M340.963,101.878H12.105C5.423,101.878,0,107.301,0,113.983v328.862c0,6.68,5.423,12.105,12.105,12.105h328.857 c6.685,0,12.104-5.426,12.104-12.105V113.983C353.067,107.301,347.647,101.878,340.963,101.878z M67.584,120.042h217.895v101.884 H67.584V120.042z M296.076,429.228H56.998V278.414h239.079V429.228z M223.947,135.173h30.269v72.638h-30.269V135.173z M274.13,315.741H78.933v-12.105H274.13V315.741z M274.13,358.109H78.933v-12.105H274.13V358.109z M274.13,398.965H78.933v-12.105 H274.13V398.965z M473.109,30.263v328.863c0,6.68-5.426,12.105-12.105,12.105H384.59v-25.724h31.528V194.694H384.59v-56.489h20.93 V36.321H187.625v43.361h-67.583v-49.42c0-6.682,5.423-12.105,12.105-12.105H461.01C467.695,18.158,473.109,23.581,473.109,30.263z M343.989,51.453h30.269v31.321c-3.18-1.918-6.868-3.092-10.853-3.092h-19.416V51.453z M394.177,232.021h-9.581v-12.105h9.581 V232.021z M384.59,262.284h9.581v12.105h-9.581V262.284z M384.59,303.14h9.581v12.104h-9.581V303.14z"/></svg>',
+                displayName: "Disks"
+            },
+            contextMenu: {
+                visible: true,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--!Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2023 Fonticons, Inc.--><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg>',
+                displayName: "Context Menu"
+            }
+        };
+        this.defaultButtonAliases = {
+            volume: "volumeSlider"
+        };
+
         let mergedButtonOptions = this.defaultButtonOptions;
 
         // merge buttonUserOpts with mergedButtonOptions
@@ -1341,14 +1594,23 @@ class EmulatorJS {
                     searchKey = this.defaultButtonAliases[key];
                 }
 
-                // prevent the contextMenu button from being overridden
-                if (searchKey === "contextMenu")
-                    continue;
-
                 // Check if the button exists in the default buttons, and update its properties
+                // If the button does not exist, create a custom button
                 if (!mergedButtonOptions[searchKey]) {
-                    console.warn(`Button "${searchKey}" is not a valid button.`);
-                    continue;
+                    // If the button does not exist in the default buttons, create a custom button
+                    // Custom buttons must have a displayName, icon, and callback property
+                    if (!buttonUserOpts[searchKey] || !buttonUserOpts[searchKey].displayName || !buttonUserOpts[searchKey].icon || !buttonUserOpts[searchKey].callback) {
+                        if (this.debug) console.warn(`Custom button "${searchKey}" is missing required properties`);
+                        continue;
+                    }
+
+                    mergedButtonOptions[searchKey] = {
+                        visible: true,
+                        displayName: buttonUserOpts[searchKey].displayName || searchKey,
+                        icon: buttonUserOpts[searchKey].icon || "",
+                        callback: buttonUserOpts[searchKey].callback || (() => { }),
+                        custom: true
+                    };
                 }
 
                 // if the value is a boolean, set the visible property to the value
@@ -1357,7 +1619,10 @@ class EmulatorJS {
                 } else if (typeof buttonUserOpts[searchKey] === "object") {
                     // If the value is an object, merge it with the default button properties
     
-                    if (this.defaultButtonOptions[searchKey]) {
+                    // if the button is the contextMenu, only allow the visible property to be set
+                    if (searchKey === "contextMenu") {
+                        mergedButtonOptions[searchKey].visible = buttonUserOpts[searchKey].visible !== undefined ? buttonUserOpts[searchKey].visible : true;
+                    } else if (this.defaultButtonOptions[searchKey]) {
                         // copy properties from the button definition if they aren't null
                         for (const prop in buttonUserOpts[searchKey]) {
                             if (buttonUserOpts[searchKey][prop] !== null) {
@@ -1375,7 +1640,7 @@ class EmulatorJS {
                                 callback: buttonUserOpts[searchKey].callback,
                                 custom: true
                             };
-                        } else {
+                        } else if (this.debug) {
                             console.warn(`Custom button "${searchKey}" is missing required properties`);
                         }
                     }
@@ -1909,7 +2174,7 @@ class EmulatorJS {
             if (stateUrl) URL.revokeObjectURL(stateUrl);
             if (this.getSettingValue("save-state-location") === "browser" && this.saveInBrowserSupported()) {
                 this.storage.states.put(this.getBaseFileName() + ".state", state);
-                this.displayMessage(this.localization("SAVE SAVED TO BROWSER"));
+                this.displayMessage(this.localization("SAVED STATE TO BROWSER"));
             } else {
                 const blob = new Blob([state]);
                 stateUrl = URL.createObjectURL(blob);
@@ -1925,7 +2190,7 @@ class EmulatorJS {
             if (this.getSettingValue("save-state-location") === "browser" && this.saveInBrowserSupported()) {
                 this.storage.states.get(this.getBaseFileName() + ".state").then(e => {
                     this.gameManager.loadState(e);
-                    this.displayMessage(this.localization("SAVE LOADED FROM BROWSER"));
+                    this.displayMessage(this.localization("LOADED STATE FROM BROWSER"));
                 })
             } else {
                 const file = await this.selectFile();
@@ -1944,7 +2209,7 @@ class EmulatorJS {
             this.openCacheMenu();
         });
 
-        if (this.config.disableDatabases) cache.style.display = "none";
+        if (this.config.cacheConfig.enabled === false) cache.style.display = "none";
 
         let savUrl;
 
@@ -2275,7 +2540,7 @@ class EmulatorJS {
                 pauseButton.style.display = "none";
                 playButton.style.display = "none";
             }
-            if (this.config.buttonOpts.contextMenuButton === false && this.config.buttonOpts.rightClick !== false && this.isMobile === false) contextMenuButton.style.display = "none"
+            if (this.config.buttonOpts.contextMenu.visible === false && this.config.buttonOpts.rightClick !== false && this.isMobile === false) contextMenuButton.style.display = "none"
             if (this.config.buttonOpts.restart.visible === false) restartButton.style.display = "none"
             if (this.config.buttonOpts.settings.visible === false) settingButton[0].style.display = "none"
             if (this.config.buttonOpts.fullscreen.visible === false) {
@@ -2335,26 +2600,67 @@ class EmulatorJS {
     }
     openCacheMenu() {
         (async () => {
+            // Run cleanup before showing cache contents
+            await this.storageCache.cleanup();
+
             const list = this.createElement("table");
+            const thead = this.createElement("thead");
             const tbody = this.createElement("tbody");
+
+            // Create header row
+            const headerRow = this.createElement("tr");
+            const nameHeader = this.createElement("th");
+            const typeHeader = this.createElement("th");
+            const sizeHeader = this.createElement("th");
+            const lastUsedHeader = this.createElement("th");
+            const actionHeader = this.createElement("th");
+
+            nameHeader.innerText = "Filename";
+            typeHeader.innerText = "Type";
+            sizeHeader.innerText = "Size";
+            lastUsedHeader.innerText = "Last Used";
+            actionHeader.innerText = "Action";
+
+            nameHeader.style.textAlign = "left";
+            typeHeader.style.textAlign = "left";
+            sizeHeader.style.textAlign = "left";
+            lastUsedHeader.style.textAlign = "left";
+            actionHeader.style.textAlign = "left";
+
+            headerRow.appendChild(nameHeader);
+            headerRow.appendChild(typeHeader);
+            headerRow.appendChild(sizeHeader);
+            headerRow.appendChild(lastUsedHeader);
+            headerRow.appendChild(actionHeader);
+            thead.appendChild(headerRow);
+
             const body = this.createPopup("Cache Manager", {
+                "Cleanup Now": async () => {
+                    const cleanupBtn = document.querySelector('.ejs_popup_button');
+                    if (cleanupBtn) cleanupBtn.textContent = 'Cleaning...';
+                    await this.storageCache.cleanup();
+                    tbody.innerHTML = "";
+                    // Refresh the cache list
+                    await this.populateCacheList(tbody, getSize, getTypeName);
+                    if (cleanupBtn) cleanupBtn.textContent = 'Cleanup Now';
+                },
                 "Clear All": async () => {
-                    const roms = await this.storage.rom.getSizes();
-                    for (const k in roms) {
-                        await this.storage.rom.remove(k);
-                    }
+                    await this.storageCache.clear();
                     tbody.innerHTML = "";
                 },
                 "Close": () => {
                     this.closePopup();
                 }
             });
-            const roms = await this.storage.rom.getSizes();
+            
             list.style.width = "100%";
             list.style["padding-left"] = "10px";
             list.style["text-align"] = "left";
-            body.appendChild(list);
+            
+            list.appendChild(thead);
             list.appendChild(tbody);
+            body.appendChild(list);
+
             const getSize = function (size) {
                 let i = -1;
                 do {
@@ -2362,30 +2668,86 @@ class EmulatorJS {
                 } while (size > 1024);
                 return Math.max(size, 0.1).toFixed(1) + [" kB", " MB", " GB", " TB", "PB", "EB", "ZB", "YB"][i];
             }
-            for (const k in roms) {
-                const line = this.createElement("tr");
-                const name = this.createElement("td");
-                const size = this.createElement("td");
-                const remove = this.createElement("td");
-                remove.style.cursor = "pointer";
-                name.innerText = k;
-                size.innerText = getSize(roms[k]);
 
-                const a = this.createElement("a");
-                a.innerText = this.localization("Remove");
-                this.addEventListener(remove, "click", () => {
-                    this.storage.rom.remove(k);
-                    line.remove();
-                })
-                remove.appendChild(a);
-
-                line.appendChild(name);
-                line.appendChild(size);
-                line.appendChild(remove);
-                tbody.appendChild(line);
+            const getTypeName = function (key) {
+                if (key.startsWith('compression_')) return 'Decompressed Content';
+                if (key.startsWith('core_decompressed_')) return 'Core';
+                // Additional fallback logic for other types
+                if (key.includes('core')) return 'Core';
+                if (key.includes('bios')) return 'BIOS';
+                if (key.includes('rom')) return 'ROM';
+                if (key.includes('asset')) return 'Asset';
+                return 'Unknown';
             }
+
+            await this.populateCacheList(tbody, getSize, getTypeName);
         })();
     }
+
+    async populateCacheList(tbody, getSize, getTypeName) {
+        // Get all cache items from the compression cache
+        const allCacheItems = await this.storageCache.storage.getAll();
+
+        for (const item of allCacheItems) {
+            if (!item.key || !item.fileSize) continue;
+
+            const line = this.createElement("tr");
+            const name = this.createElement("td");
+            const type = this.createElement("td");
+            const size = this.createElement("td");
+            const lastUsed = this.createElement("td");
+            const remove = this.createElement("td");
+            remove.style.cursor = "pointer";
+
+            // Calculate total size of all files in this cache item
+            let totalSize = item.fileSize;
+
+            // Use filename if available, otherwise fall back to key
+            const displayName = item.filename || item.key;
+            name.innerText = displayName.substring(0, 50) + (displayName.length > 50 ? '...' : '');
+
+            // Use the stored type if available, otherwise fall back to getTypeName
+            const itemType = item.type || getTypeName(item.key);
+            type.innerText = itemType;
+            size.innerText = getSize(totalSize);
+
+            // Format last accessed time
+            const lastAccessedTime = item.lastAccessed || item.added || Date.now();
+            const formatDate = (timestamp) => {
+                const date = new Date(timestamp);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / (1000 * 60));
+                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+                if (diffMins < 1) return 'Just now';
+                if (diffMins < 60) return `${diffMins}m ago`;
+                if (diffHours < 24) return `${diffHours}h ago`;
+                if (diffDays < 7) return `${diffDays}d ago`;
+
+                // For older items, show the actual date
+                return date.toLocaleDateString();
+            };
+            lastUsed.innerText = formatDate(lastAccessedTime);
+
+            const a = this.createElement("a");
+            a.innerText = this.localization("Remove");
+            this.addEventListener(remove, "click", async () => {
+                await this.storageCache.delete(item.key);
+                line.remove();
+            })
+            remove.appendChild(a);
+
+            line.appendChild(name);
+            line.appendChild(type);
+            line.appendChild(size);
+            line.appendChild(lastUsed);
+            line.appendChild(remove);
+            tbody.appendChild(line);
+        }
+    }
+
     getControlScheme() {
         if (this.config.controlScheme && typeof this.config.controlScheme === "string") {
             return this.config.controlScheme;
@@ -2401,12 +2763,14 @@ class EmulatorJS {
         this.controls = JSON.parse(JSON.stringify(this.defaultControllers));
         const body = this.createPopup("Control Settings", {
             "Reset": () => {
+                this.stopAllAutofire();
                 this.controls = JSON.parse(JSON.stringify(this.defaultControllers));
                 this.setupKeys();
                 this.checkGamepadInputs();
                 this.saveSettings();
             },
             "Clear": () => {
+                this.stopAllAutofire();
                 this.controls = { 0: {}, 1: {}, 2: {}, 3: {} };
                 this.setupKeys();
                 this.checkGamepadInputs();
@@ -2531,7 +2895,7 @@ class EmulatorJS {
                 { id: 17, label: this.localization("RIGHT D-PAD LEFT") },
                 { id: 16, label: this.localization("RIGHT D-PAD RIGHT") },
             ];
-        } else if (["segaCD", "sega32x"].includes(this.getControlScheme())) {
+        } else if (["segaMD", "segaCD", "sega32x"].includes(this.getControlScheme())) {
             buttons = [
                 { id: 1, label: this.localization("A") },
                 { id: 0, label: this.localization("B") },
@@ -2739,6 +3103,31 @@ class EmulatorJS {
                 { id: 17, label: this.localization("STICK LEFT") },
                 { id: 16, label: this.localization("STICK RIGHT") },
             ];
+        } else if ("psx" === this.getControlScheme()) {
+            buttons = [
+                { id: 9, label: this.localization("\u25B3") }, // △
+                { id: 1, label: this.localization("\u25A1") }, // □
+                { id: 0, label: this.localization("\uFF58") }, // ｘ
+                { id: 8, label: this.localization("\u25CB") }, // ○
+                { id: 2, label: this.localization("SELECT") },
+                { id: 3, label: this.localization("START") },
+                { id: 4, label: this.localization("UP") },
+                { id: 5, label: this.localization("DOWN") },
+                { id: 6, label: this.localization("LEFT") },
+                { id: 7, label: this.localization("RIGHT") },
+                { id: 10, label: this.localization("L1") },
+                { id: 11, label: this.localization("R1") },
+                { id: 12, label: this.localization("L2") },
+                { id: 13, label: this.localization("R2") },
+                { id: 19, label: this.localization("L STICK UP") },
+                { id: 18, label: this.localization("L STICK DOWN") },
+                { id: 17, label: this.localization("L STICK LEFT") },
+                { id: 16, label: this.localization("L STICK RIGHT") },
+                { id: 23, label: this.localization("R STICK UP") },
+                { id: 22, label: this.localization("R STICK DOWN") },
+                { id: 21, label: this.localization("R STICK LEFT") },
+                { id: 20, label: this.localization("R STICK RIGHT") },
+            ];
         } else {
             buttons = [
                 { id: 0, label: this.localization("B") },
@@ -2877,7 +3266,7 @@ class EmulatorJS {
             leftPadding.innerHTML = "&nbsp;";
 
             const aboutParent = this.createElement("div");
-            aboutParent.style = "font-size:12px;width:50%;float:left;";
+            aboutParent.style = "font-size:12px;width:40%;float:left;";
             const gamepad = this.createElement("div");
             gamepad.style = "text-align:center;width:50%;float:left;";
             gamepad.innerText = this.localization("Gamepad");
@@ -2887,12 +3276,22 @@ class EmulatorJS {
             keyboard.innerText = this.localization("Keyboard");
             aboutParent.appendChild(keyboard);
 
+            const setHeader = this.createElement("div");
+            setHeader.style = "font-size:12px;width:15%;float:left;text-align:center;";
+            setHeader.innerHTML = "&nbsp;";
+
+            const autofireHeader = this.createElement("div");
+            autofireHeader.style = "font-size:12px;width:20%;float:left;text-align:center;";
+            autofireHeader.innerText = this.localization("Autofire");
+
             const headingPadding = this.createElement("div");
             headingPadding.style = "clear:both;";
 
             playerTitle.appendChild(gamepadTitle);
             playerTitle.appendChild(leftPadding);
             playerTitle.appendChild(aboutParent);
+            playerTitle.appendChild(setHeader);
+            playerTitle.appendChild(autofireHeader);
 
             if ((this.touch || this.hasTouchScreen) && i === 0) {
                 const vgp = this.createElement("div");
@@ -2943,7 +3342,7 @@ class EmulatorJS {
                 title.appendChild(label);
 
                 const textBoxes = this.createElement("div");
-                textBoxes.style = "width:50%;float:left;";
+                textBoxes.style = "width:40%;float:left;";
 
                 const textBox1Parent = this.createElement("div");
                 textBox1Parent.style = "width:50%;float:left;padding: 0 5px;";
@@ -3011,11 +3410,46 @@ class EmulatorJS {
                 textBoxes.appendChild(padding);
 
                 const setButton = this.createElement("div");
-                setButton.style = "width:25%;float:left;";
+                setButton.style = "width:15%;float:left;";
                 const button = this.createElement("a");
                 button.classList.add("ejs_control_set_button");
                 button.innerText = this.localization("Set");
                 setButton.appendChild(button);
+
+                // Autofire checkbox - not available for analog stick axes
+                const autofireColumn = this.createElement("div");
+                autofireColumn.style = "width:20%;float:left;text-align:center;";
+
+                if (!this.analogAxes.includes(k)) {
+                    const autofireCheckbox = this.createElement("input");
+                    autofireCheckbox.type = "checkbox";
+                    autofireCheckbox.style = "cursor:pointer;";
+                    autofireCheckbox.checked = this.controls[i][k] && this.controls[i][k].autofire === true;
+                    autofireCheckbox.setAttribute("data-player", i);
+                    autofireCheckbox.setAttribute("data-button", k);
+
+                    // Update checkbox state when controls change
+                    buttonListeners.push(() => {
+                        autofireCheckbox.checked = this.controls[i][k] && this.controls[i][k].autofire === true;
+                    });
+
+                    this.addEventListener(autofireCheckbox, "change", (e) => {
+                        e.stopPropagation();
+                        const playerIdx = parseInt(e.target.getAttribute("data-player"));
+                        const buttonIdx = parseInt(e.target.getAttribute("data-button"));
+                        if (!this.controls[playerIdx][buttonIdx]) {
+                            this.controls[playerIdx][buttonIdx] = {};
+                        }
+                        this.controls[playerIdx][buttonIdx].autofire = e.target.checked;
+                        // Stop any active autofire if unchecked
+                        if (!e.target.checked) {
+                            this.stopAutofire(playerIdx, buttonIdx);
+                        }
+                        this.saveSettings();
+                    });
+
+                    autofireColumn.appendChild(autofireCheckbox);
+                }
 
                 const padding2 = this.createElement("div");
                 padding2.style = "clear:both;";
@@ -3023,11 +3457,16 @@ class EmulatorJS {
                 buttonText.appendChild(title);
                 buttonText.appendChild(textBoxes);
                 buttonText.appendChild(setButton);
+                buttonText.appendChild(autofireColumn);
                 buttonText.appendChild(padding2);
 
                 player.appendChild(buttonText);
 
                 this.addEventListener(buttonText, "mousedown", (e) => {
+                    // Don't open popup when clicking on the autofire checkbox
+                    if (e.target.tagName === "INPUT" && e.target.type === "checkbox") {
+                        return;
+                    }
                     e.preventDefault();
                     this.controlPopup.parentElement.parentElement.removeAttribute("hidden");
                     this.controlPopup.innerText = "[ " + controlLabel + " ]\n" + this.localization("Press Keyboard");
@@ -3194,6 +3633,8 @@ class EmulatorJS {
             2: {},
             3: {}
         }
+        // Analog stick axes - these use 0x7fff values and don't support autofire
+        this.analogAxes = [16, 17, 18, 19, 20, 21, 22, 23];
         this.keyMap = {
             0: "",
             8: "backspace",
@@ -3304,7 +3745,7 @@ class EmulatorJS {
                     this.controls[i][j].value = parseInt(this.keyLookup(this.controls[i][j].value));
                     if (this.controls[i][j].value === -1 && this.debug) {
                         delete this.controls[i][j].value;
-                        console.warn("Invalid key for control " + j + " player " + i);
+                        if (this.debug) console.warn("Invalid key for control " + j + " player " + i);
                     }
                 }
             }
@@ -3320,6 +3761,49 @@ class EmulatorJS {
             return Object.keys(this.keyMap)[index];
         }
         return -1;
+    }
+    getAutofireInterval(playerIndex, buttonIndex) {
+        const control = this.controls[playerIndex] && this.controls[playerIndex][buttonIndex];
+        if (control && typeof control.autoFireInterval === "number") {
+            return control.autoFireInterval;
+        }
+        const settingValue = this.getSettingValue("autofireInterval");
+        return settingValue ? parseInt(settingValue) : this.defaultAutoFireInterval;
+    }
+    isAutofireEnabled(playerIndex, buttonIndex) {
+        const control = this.controls[playerIndex] && this.controls[playerIndex][buttonIndex];
+        return control && control.autofire === true;
+    }
+    startAutofire(playerIndex, buttonIndex, inputValue) {
+        const key = `${playerIndex}-${buttonIndex}`;
+        if (this.autofireIntervals[key]) {
+            return;
+        }
+        let pressed = true;
+        const interval = this.getAutofireInterval(playerIndex, buttonIndex);
+        this.autofireIntervals[key] = setInterval(() => {
+            if (this.paused || !this.gameManager) return;
+            pressed = !pressed;
+            this.gameManager.simulateInput(playerIndex, buttonIndex, pressed ? inputValue : 0);
+        }, interval);
+    }
+    stopAutofire(playerIndex, buttonIndex) {
+        const key = `${playerIndex}-${buttonIndex}`;
+        if (this.autofireIntervals[key]) {
+            clearInterval(this.autofireIntervals[key]);
+            delete this.autofireIntervals[key];
+            this.gameManager.simulateInput(playerIndex, buttonIndex, 0);
+        }
+    }
+    stopAllAutofire() {
+        for (const key in this.autofireIntervals) {
+            clearInterval(this.autofireIntervals[key]);
+            const [playerIndex, buttonIndex] = key.split("-").map(Number);
+            if (this.gameManager) {
+                this.gameManager.simulateInput(playerIndex, buttonIndex, 0);
+            }
+        }
+        this.autofireIntervals = {};
     }
     keyChange(e) {
         if (e.repeat) return;
@@ -3338,11 +3822,19 @@ class EmulatorJS {
         }
         if (this.settingsMenu.style.display !== "none" || this.isPopupOpen() || this.getSettingValue("keyboardInput") === "enabled") return;
         e.preventDefault();
-        const special = [16, 17, 18, 19, 20, 21, 22, 23];
         for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 30; j++) {
                 if (this.controls[i][j] && this.controls[i][j].value === e.keyCode) {
-                    this.gameManager.simulateInput(i, j, (e.type === "keyup" ? 0 : (special.includes(j) ? 0x7fff : 1)));
+                    const isAnalog = this.analogAxes.includes(j);
+                    const inputValue = isAnalog ? 0x7fff : 1;
+                    const isKeyUp = e.type === "keyup";
+                    const value = isKeyUp ? 0 : inputValue;
+
+                    if (this.isAutofireEnabled(i, j) && !isAnalog) {
+                        isKeyUp ? this.stopAutofire(i, j) : this.startAutofire(i, j, inputValue);
+                    } else {
+                        this.gameManager.simulateInput(i, j, value);
+                    }
                 }
             }
         }
@@ -3375,7 +3867,6 @@ class EmulatorJS {
             return;
         }
         if (this.settingsMenu.style.display !== "none" || this.isPopupOpen()) return;
-        const special = [16, 17, 18, 19, 20, 21, 22, 23];
         for (let i = 0; i < 4; i++) {
             if (gamepadIndex !== i) continue;
             for (let j = 0; j < 30; j++) {
@@ -3383,12 +3874,21 @@ class EmulatorJS {
                     continue;
                 }
                 const controlValue = this.controls[i][j].value2;
+                const isAnalog = this.analogAxes.includes(j);
 
                 if (["buttonup", "buttondown"].includes(e.type) && (controlValue === e.label || controlValue === e.index)) {
-                    this.gameManager.simulateInput(i, j, (e.type === "buttonup" ? 0 : (special.includes(j) ? 0x7fff : 1)));
+                    const inputValue = isAnalog ? 0x7fff : 1;
+                    const isButtonUp = e.type === "buttonup";
+                    const value = isButtonUp ? 0 : inputValue;
+
+                    if (this.isAutofireEnabled(i, j) && !isAnalog) {
+                        isButtonUp ? this.stopAutofire(i, j) : this.startAutofire(i, j, inputValue);
+                    } else {
+                        this.gameManager.simulateInput(i, j, value);
+                    }
                 } else if (e.type === "axischanged") {
                     if (typeof controlValue === "string" && controlValue.split(":")[0] === e.axis) {
-                        if (special.includes(j)) {
+                        if (isAnalog) {
                             if (j === 16 || j === 17) {
                                 if (e.value > 0) {
                                     this.gameManager.simulateInput(i, 16, 0x7fff * e.value);
@@ -3449,11 +3949,11 @@ class EmulatorJS {
         let info;
         if (this.config.VirtualGamepadSettings && function (set) {
             if (!Array.isArray(set)) {
-                console.warn("Virtual gamepad settings is not array! Using default gamepad settings");
+                if (this.debug) console.warn("Virtual gamepad settings is not array! Using default gamepad settings");
                 return false;
             }
             if (!set.length) {
-                console.warn("Virtual gamepad settings is empty! Using default gamepad settings");
+                if (this.debug) console.warn("Virtual gamepad settings is empty! Using default gamepad settings");
                 return false;
             }
             for (let i = 0; i < set.length; i++) {
@@ -3801,14 +4301,19 @@ class EmulatorJS {
                 let downValue = info[i].joystickInput === true ? 0x7fff : 1;
                 this.addEventListener(button, "touchstart touchend touchcancel", (e) => {
                     e.preventDefault();
+                    const isAnalog = this.analogAxes.includes(value);
                     if (e.type === "touchend" || e.type === "touchcancel") {
                         e.target.classList.remove("ejs_virtualGamepad_button_down");
                         window.setTimeout(() => {
+                            this.stopAutofire(0, value);
                             this.gameManager.simulateInput(0, value, 0);
                         })
                     } else {
                         e.target.classList.add("ejs_virtualGamepad_button_down");
                         this.gameManager.simulateInput(0, value, downValue);
+                        if (this.isAutofireEnabled(0, value) && !isAnalog) {
+                            this.startAutofire(0, value, downValue);
+                        }
                     }
                 })
             }
@@ -4308,19 +4813,9 @@ class EmulatorJS {
                 this.gameManager.setVideoRotation(0);
                 this.videoRotationChanged = true;
             }
-        } else if (option === "save-save-interval") {
+        } else if (option === "save-save-interval" && !this.config.fixedSaveInterval) {
             value = parseInt(value);
-            if (this.saveSaveInterval && this.saveSaveInterval !== null) {
-                clearInterval(this.saveSaveInterval);
-                this.saveSaveInterval = null;
-            }
-            // Disabled
-            if (value === 0 || isNaN(value)) return;
-            if (this.started) this.gameManager.saveSaveFiles();
-            if (this.debug) console.log("Saving every", value * 1000, "miliseconds");
-            this.saveSaveInterval = setInterval(() => {
-                if (this.started) this.gameManager.saveSaveFiles();
-            }, value * 1000);
+            this.startSaveInterval(value * 1000);
         } else if (option === "menubarBehavior") {
             this.createBottomMenuBarListeners();
         } else if (option === "keyboardInput") {
@@ -4329,6 +4824,8 @@ class EmulatorJS {
             this.gameManager.setAltKeyEnabled(value === "enabled");
         } else if (option === "lockMouse") {
             this.enableMouseLock = (value === "enabled");
+        } else if (option === "autofireInterval") {
+            this.defaultAutoFireInterval = parseInt(value);
         }
     }
     menuOptionChanged(option, value) {
@@ -4535,7 +5032,6 @@ class EmulatorJS {
         const nested = this.createElement("div");
         nested.classList.add("ejs_settings_transition");
         this.settings = {};
-        this.allSettings = {};
         const menus = [];
         let parentMenuCt = 0;
 
@@ -4995,6 +5491,14 @@ class EmulatorJS {
             "enabled": this.localization("Enabled"),
         }, (this.enableMouseLock === true ? "enabled" : "disabled"), inputOptions, true);
 
+        addToMenu(this.localization("Autofire Interval"), "autofireInterval", {
+            "20": "20ms",
+            "50": "50ms",
+            "100": "100ms",
+            "200": "200ms",
+            "500": "500ms",
+        }, "100", inputOptions, true);
+
         checkForEmptyMenu(inputOptions);
 
         if (this.saveInBrowserSupported()) {
@@ -5004,15 +5508,17 @@ class EmulatorJS {
                 "download": this.localization("Download"),
                 "browser": this.localization("Keep in Browser")
             }, "download", saveStateOpts, true);
-            addToMenu(this.localization("System Save interval"), "save-save-interval", {
-                "0": "Disabled",
-                "30": "30 seconds",
-                "60": "1 minute",
-                "300": "5 minutes",
-                "600": "10 minutes",
-                "900": "15 minutes",
-                "1800": "30 minutes"
-            }, "300", saveStateOpts, true);
+            if (!this.config.fixedSaveInterval) {
+                addToMenu(this.localization("System Save interval"), "save-save-interval", {
+                    "0": "Disabled",
+                    "30": "30 seconds",
+                    "60": "1 minute",
+                    "300": "5 minutes",
+                    "600": "10 minutes",
+                    "900": "15 minutes",
+                    "1800": "30 minutes"
+                }, "300", saveStateOpts, true);
+            }
             checkForEmptyMenu(saveStateOpts);
         }
 
@@ -5126,9 +5632,45 @@ class EmulatorJS {
         popup.appendChild(popupMsg);
         return [popup, popupMsg];
     }
+
+    updateNetplayUI(isJoining) {
+        if (!this.elements.bottomBar) return;
+
+        const bar = this.elements.bottomBar;
+        const isClient = !this.netplay.owner;
+        const shouldHideButtons = isJoining && isClient;
+        const elementsToToggle = [
+            ...(bar.playPause || []),
+            ...(bar.restart || []),
+            ...(bar.saveState || []),
+            ...(bar.loadState || []),
+            ...(bar.cheat || []),
+            ...(bar.saveSavFiles || []),
+            ...(bar.loadSavFiles || []),
+            ...(bar.exit || []),
+            ...(bar.contextMenu || []),
+            ...(bar.cacheManager || [])
+        ];
+        
+        // Add the parent containers to the same logic
+        if (bar.settings && bar.settings.length > 0 && bar.settings[0].parentElement) {
+            elementsToToggle.push(bar.settings[0].parentElement);
+        }
+        if (this.diskParent) {
+            elementsToToggle.push(this.diskParent);
+        }
+
+        elementsToToggle.forEach(el => {
+            if (el) {
+                el.classList.toggle('netplay-hidden', shouldHideButtons);
+            }
+        });
+    }
     createNetplayMenu() {
         const body = this.createPopup("Netplay", {
             "Create a Room": () => {
+                if (typeof this.netplay.updateList !== "function")
+                    this.defineNetplayFunctions();
                 if (this.isNetplay) {
                     this.netplay.leaveRoom();
                 } else {
@@ -5137,7 +5679,9 @@ class EmulatorJS {
             },
             "Close": () => {
                 this.netplayMenu.style.display = "none";
-                this.netplay.updateList.stop();
+                if (this.netplay.updateList) {
+                    this.netplay.updateList.stop();
+                }
             }
         }, true);
         this.netplayMenu = body.parentElement;
@@ -5157,11 +5701,11 @@ class EmulatorJS {
             item.style["text-align"] = "center";
             row.appendChild(item);
             return item;
-        }
+        };
         thead.appendChild(row);
         addToHeader("Room Name").style["text-align"] = "left";
         addToHeader("Players").style.width = "80px";
-        addToHeader("").style.width = "80px"; //"join" button
+        addToHeader("").style.width = "80px";
         table.appendChild(thead);
         const tbody = this.createElement("tbody");
 
@@ -5185,11 +5729,11 @@ class EmulatorJS {
             item.innerText = text;
             row2.appendChild(item);
             return item;
-        }
+        };
         thead2.appendChild(row2);
         addToHeader2("Player").style.width = "80px";
         addToHeader2("Name");
-        addToHeader2("").style.width = "80px"; //"join" button
+        addToHeader2("").style.width = "80px";
         table2.appendChild(thead2);
         const tbody2 = this.createElement("tbody");
 
@@ -5203,19 +5747,30 @@ class EmulatorJS {
         body.appendChild(joined);
 
         this.openNetplayMenu = () => {
+            if (this.netplayShowTurnWarning && !this.netplayWarningShown) {
+                const warningDiv = this.createElement("div");
+                warningDiv.className = "ejs_netplay_warning";
+                warningDiv.innerText = "Warning: No TURN server configured. Netplay connections may fail.";
+                const menuBody = this.netplayMenu.querySelector(".ejs_popup_body");
+                if (menuBody) {
+                    menuBody.prepend(warningDiv);
+                    this.netplayWarningShown = true;
+                }
+            }
             this.netplayMenu.style.display = "";
             if (!this.netplay || (this.netplay && !this.netplay.name)) {
-                this.netplay = {};
-                this.netplay.table = tbody;
-                this.netplay.playerTable = tbody2;
-                this.netplay.passwordElem = password;
-                this.netplay.roomNameElem = title2;
-                this.netplay.createButton = createButton;
-                this.netplay.tabs = [rooms, joined];
-                this.defineNetplayFunctions();
+                this.netplay = {
+                    table: tbody,
+                    playerTable: tbody2,
+                    passwordElem: password,
+                    roomNameElem: title2,
+                    createButton: createButton,
+                    tabs: [rooms, joined],
+                    ...this.netplay 
+                };
                 const popups = this.createSubPopup();
                 this.netplayMenu.appendChild(popups[0]);
-                popups[1].classList.add("ejs_cheat_parent"); //Hehe
+                popups[1].classList.add("ejs_cheat_parent");
                 const popup = popups[1];
 
                 const header = this.createElement("div");
@@ -5246,71 +5801,187 @@ class EmulatorJS {
                 submit.innerText = this.localization("Submit");
                 popup.appendChild(submit);
                 this.addEventListener(submit, "click", (e) => {
-                    if (!input.value.trim()) return;
+                    if (!input.value.trim())
+                        return;
                     this.netplay.name = input.value.trim();
                     popups[0].remove();
-                })
+                });
+            }
+            if (typeof this.netplay.updateList !== "function") {
+                this.defineNetplayFunctions();
             }
             this.netplay.updateList.start();
-        }
+        };
     }
+
     defineNetplayFunctions() {
+        const EJS_INSTANCE = this;
+
         function guidGenerator() {
-            const S4 = function() {
+            const S4 = function () {
                 return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
             };
             return (S4() + S4() + "-" + S4() + "-" + S4() + "-" + S4() + "-" + S4() + S4() + S4());
         }
-        this.netplay.url = this.config.netplayUrl;
-        while (this.netplay.url.endsWith("/")) {
-            this.netplay.url = this.netplay.url.substring(0, this.netplay.url.length - 1);
-        }
-        this.netplay.current_frame = 0;
-        this.netplay.getOpenRooms = async () => {
-            return JSON.parse(await (await fetch(this.netplay.url + "/list?domain=" + window.location.host + "&game_id=" + this.config.gameId)).text());
-        }
-        this.netplay.updateTableList = async () => {
-            const addToTable = (id, name, current, max) => {
+        this.getNativeResolution = function () {
+            if (this.Module && this.Module.getNativeResolution) {
+                try {
+                    const res = this.Module.getNativeResolution();
+                    console.log("Native resolution from Module:", res);
+                    return res;
+                } catch (error) {
+                    console.error("Failed to get native resolution:", error);
+                    return {
+                        width: 640,
+                        height: 480
+                    };
+                }
+            }
+            return {
+                width: 640,
+                height: 480
+            };
+        };
+
+        this.netplayGetUserIndex = function () {
+            if (!this.isNetplay || !this.netplay.players || !this.netplay.playerID) {
+                console.warn("netplayGetUserIndex: Netplay not active or players/playerID undefined");
+                return 0;
+            }
+            const playerIds = Object.keys(this.netplay.players);
+            const index = playerIds.indexOf(this.netplay.playerID);
+            return index === -1 ? 0 : index;
+        };
+
+        this.netplay.simulateInput = (player, index, value) => {
+            console.log("netplay.simulateInput called:", {
+                player,
+                index,
+                value,
+                playerIndex: this.netplayGetUserIndex()
+            });
+            if (!this.isNetplay || !this.gameManager || !this.gameManager.functions || !this.gameManager.functions.simulateInput) {
+                console.error("Cannot simulate input: Netplay not active or gameManager.functions.simulateInput undefined");
+                return;
+            }
+            const playerIndex = this.netplayGetUserIndex();
+            let frame = this.netplay.currentFrame || 0;
+            if (this.netplay.owner) {
+                if (!this.netplay.inputsData[frame])
+                    this.netplay.inputsData[frame] = [];
+                this.netplay.inputsData[frame].push({
+                    frame: frame,
+                    connected_input: [playerIndex, index, value]
+                });
+                this.gameManager.functions.simulateInput(playerIndex, index, value);
+            } else {
+                this.gameManager.functions.simulateInput(playerIndex, index, value);
+                if (this.netplaySendMessage) {
+                    this.netplaySendMessage({
+                        "sync-control": [{
+                                frame: frame + 20,
+                                connected_input: [playerIndex, index, value]
+                            }
+                        ]
+                    });
+                } else {
+                    console.error("netplaySendMessage is undefined");
+                }
+            }
+        };
+
+        this.netplayUpdateTableList = async () => {
+            if (!this.netplay || !this.netplay.table) {
+                console.error("netplay or netplay.table is undefined");
+                return;
+            }
+
+            const addToTable = (id, name, current, max, hasPassword) => {
                 const row = this.createElement("tr");
                 row.classList.add("ejs_netplay_table_row");
-                const addToHeader = (text) => {
+                const addCell = (text) => {
                     const item = this.createElement("td");
                     item.innerText = text;
                     item.style.padding = "10px 0";
                     item.style["text-align"] = "center";
                     row.appendChild(item);
                     return item;
-                }
-                addToHeader(name).style["text-align"] = "left";
-                addToHeader(current + "/" + max).style.width = "80px";
-
-                const parent = addToHeader("");
+                };
+                addCell(name).style["text-align"] = "left";
+                addCell(current + "/" + max).style.width = "80px";
+                const parent = addCell("");
                 parent.style.width = "80px";
                 this.netplay.table.appendChild(row);
+
                 if (current < max) {
                     const join = this.createElement("button");
-                    join.classList.add("ejs_netplay_join_button");
-                    join.classList.add("ejs_button_button");
+                    join.classList.add("ejs_netplay_join_button", "ejs_button_button");
                     join.style["background-color"] = "rgba(var(--ejs-primary-color),1)";
                     join.innerText = this.localization("Join");
                     parent.appendChild(join);
-                    this.addEventListener(join, "click", (e) => {
-                        this.netplay.joinRoom(id, name);
-                    })
-                    return join;
+
+                    this.addEventListener(join, "click", () => {
+                        if (hasPassword) {
+                            let password = prompt("Please enter the room password:");
+                            if (password !== null) {
+                                password = password.trim();
+                                this.netplayJoinRoom(id, name, max, password);
+                            }
+                        } else {
+                            this.netplayJoinRoom(id, name, max, null);
+                        }
+                    });
                 }
+            };
+
+            try {
+                const open = await this.netplayGetOpenRooms();
+                this.netplay.table.innerHTML = "";
+                for (const k in open) {
+                    addToTable(k, open[k].room_name, open[k].current, open[k].max, open[k].hasPassword);
+                }
+            } catch (e) {
+                console.error("Could not update room list:", e);
             }
-            const open = await this.netplay.getOpenRooms();
-            //console.log(open);
-            this.netplay.table.innerHTML = "";
-            for (const k in open) {
-                addToTable(k, open[k].room_name, open[k].current, open[k].max);//todo: password
+        };
+
+        this.netplayGetOpenRooms = async () => {
+            if (!this.netplay.url) {
+                console.error("netplay.url is undefined");
+                return {};
             }
-        }
-        this.netplay.showOpenRoomDialog = () => {
+            try {
+                const response = await fetch(this.netplay.url + "/list?domain=" + window.location.host + "&game_id=" + this.config.gameId);
+                const data = await response.text();
+                console.log("Fetched open rooms:", data);
+                return JSON.parse(data);
+            } catch (error) {
+                console.error("Error fetching open rooms:", error);
+                return {};
+            }
+        };
+
+        this.netplayUpdateListStart = () => {
+            if (!this.netplayUpdateTableList) {
+                console.error("netplayUpdateTableList is undefined");
+                return;
+            }
+            this.netplay.updateListInterval = setInterval(this.netplayUpdateTableList.bind(this), 1000);
+        };
+
+        this.netplayUpdateListStop = () => {
+            clearInterval(this.netplay.updateListInterval);
+        };
+
+        this.netplayShowOpenRoomDialog = () => {
+            if (!this.createSubPopup || !this.createElement || !this.localization || !this.addEventListener) {
+                console.error("Required methods for netplayShowOpenRoomDialog are undefined");
+                return;
+            }
+            this.originalControls = JSON.parse(JSON.stringify(this.controls));
             const popups = this.createSubPopup();
             this.netplayMenu.appendChild(popups[0]);
-            popups[1].classList.add("ejs_cheat_parent"); //Hehe
+            popups[1].classList.add("ejs_cheat_parent");
             const popup = popups[1];
 
             const header = this.createElement("div");
@@ -5321,93 +5992,644 @@ class EmulatorJS {
             popup.appendChild(header);
 
             const main = this.createElement("div");
-
             main.classList.add("ejs_netplay_header");
             const rnhead = this.createElement("strong");
             rnhead.innerText = this.localization("Room Name");
             const rninput = this.createElement("input");
             rninput.type = "text";
-            rninput.setAttribute("maxlength", 20);
+            rninput.setAttribute("maxlength", "20");
 
             const maxhead = this.createElement("strong");
             maxhead.innerText = this.localization("Max Players");
             const maxinput = this.createElement("select");
-            maxinput.setAttribute("disabled", "disabled");
-            const val2 = this.createElement("option");
-            val2.value = 2;
-            val2.innerText = "2";
-            const val3 = this.createElement("option");
-            val3.value = 3;
-            val3.innerText = "3";
-            const val4 = this.createElement("option");
-            val4.value = 4;
-            val4.innerText = "4";
-            maxinput.appendChild(val2);
-            maxinput.appendChild(val3);
-            maxinput.appendChild(val4);
+            const playerCounts = ["2", "3", "4"];
+            playerCounts.forEach(count => {
+                const option = this.createElement("option");
+                option.value = count;
+                option.innerText = count;
+                option.classList.add("option-enabled");
+                maxinput.appendChild(option);
+            });
 
             const pwhead = this.createElement("strong");
             pwhead.innerText = this.localization("Password (optional)");
             const pwinput = this.createElement("input");
             pwinput.type = "text";
-            pwinput.setAttribute("maxlength", 20);
+            pwinput.setAttribute("maxlength", "20");
 
             main.appendChild(rnhead);
             main.appendChild(this.createElement("br"));
             main.appendChild(rninput);
-
             main.appendChild(maxhead);
             main.appendChild(this.createElement("br"));
             main.appendChild(maxinput);
-
             main.appendChild(pwhead);
             main.appendChild(this.createElement("br"));
             main.appendChild(pwinput);
-
             popup.appendChild(main);
 
             popup.appendChild(this.createElement("br"));
             const submit = this.createElement("button");
-            submit.classList.add("ejs_button_button");
-            submit.classList.add("ejs_popup_submit");
+            submit.classList.add("ejs_button_button", "ejs_popup_submit");
             submit.style["background-color"] = "rgba(var(--ejs-primary-color),1)";
             submit.style.margin = "0 10px";
             submit.innerText = this.localization("Submit");
             popup.appendChild(submit);
-            this.addEventListener(submit, "click", (e) => {
-                if (!rninput.value.trim()) return;
-                this.netplay.openRoom(rninput.value.trim(), parseInt(maxinput.value), pwinput.value.trim());
+            this.addEventListener(submit, "click", () => {
+                console.log("Submit button clicked");
+                if (!rninput.value.trim()) {
+                    console.log("Room name is empty, aborting");
+                    return;
+                }
+                const roomName = rninput.value.trim();
+                const maxPlayers = parseInt(maxinput.value);
+                const password = pwinput.value.trim();
+                console.log("Creating room with:", {
+                    roomName,
+                    maxPlayers,
+                    password
+                });
+                this.netplayOpenRoom(roomName, maxPlayers, password);
                 popups[0].remove();
-            })
+            });
             const close = this.createElement("button");
-            close.classList.add("ejs_button_button");
-            close.classList.add("ejs_popup_submit");
+            close.classList.add("ejs_button_button", "ejs_popup_submit");
             close.style.margin = "0 10px";
             close.innerText = this.localization("Close");
             popup.appendChild(close);
-            this.addEventListener(close, "click", (e) => {
-                popups[0].remove();
-            })
-        }
-        this.netplay.startSocketIO = (callback) => {
+            this.addEventListener(close, "click", () => popups[0].remove());
+        };
+
+        this.netplayInitWebRTCStream = async () => {
+            if (this.netplay.localStream)
+                return;
+            console.log("Initializing WebRTC stream for owner...");
+            const { width: nativeWidth, height: nativeHeight } = this.getNativeResolution();
+            if (this.canvas) {
+                this.canvas.width = nativeWidth;
+                this.canvas.height = nativeHeight;
+            }
+            if (this.netplay.owner && this.Module && this.Module.setCanvasSize) {
+                this.Module.setCanvasSize(nativeWidth, nativeHeight);
+                console.log("Set emulator canvas size to native:", {
+                    width: nativeWidth,
+                    height: nativeHeight
+                });
+            }
+
+            const stream = this.collectScreenRecordingMediaTracks(this.canvas, 30);
+            if (!stream || !stream.getTracks().length) {
+                console.error("Failed to capture stream:", stream);
+                this.displayMessage("Failed to initialize video stream", 5000);
+                return;
+            }
+            const videoTrack = stream.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.applyConstraints({
+                    width: {
+                        ideal: nativeWidth
+                    },
+                    height: {
+                        ideal: nativeHeight
+                    },
+                    frameRate: {
+                        ideal: 30,
+                        max: 30
+                    }
+                }).catch(err => console.error("Constraint error:", err));
+                console.log("Track settings:", videoTrack.getSettings());
+            }
+            stream.getTracks().forEach(track => {
+                console.log("Track:", {
+                    kind: track.kind,
+                    enabled: track.enabled,
+                    muted: track.muted
+                });
+                track.onmute = () => console.warn("Track muted:", track.id);
+                track.onended = () => console.warn("Track ended:", track.id);
+            });
+            this.netplay.localStream = stream;
+        };
+
+        this.netplayCreatePeerConnection = (peerId) => {
+            const pc = new RTCPeerConnection({
+                iceServers: this.config.netplayICEServers,
+                iceCandidatePoolSize: 10
+            });
+
+            let dataChannel;
+
+            if (this.netplay.owner) {
+                dataChannel = pc.createDataChannel('inputs');
+                dataChannel.onopen = () => console.log(`Data channel opened for peer ${peerId}`);
+                dataChannel.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "host-left") {
+                        this.displayMessage("Host left. Restarting...", 3000);
+                        this.netplayLeaveRoom();
+                        return;
+                    }
+                    const playerIndex = data.player;
+                    const frame = this.netplay.currentFrame || 0;
+
+                    if (!this.netplay.inputsData[frame]) {
+                        this.netplay.inputsData[frame] = [];
+                    }
+                    this.netplay.inputsData[frame].push({
+                        frame: frame,
+                        connected_input: [playerIndex, data.index, data.value]
+                    });
+                    if (this.gameManager && this.gameManager.functions && this.gameManager.functions.simulateInput) {
+                        this.gameManager.functions.simulateInput(playerIndex, data.index, data.value);
+                    } else {
+                        console.error("Cannot process input: gameManager.functions.simulateInput is undefined");
+                    }
+                };
+            } else {
+                pc.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    dataChannel.onopen = () => console.log(`Data channel opened for peer ${peerId}`);
+                    dataChannel.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        if (data.type === "host-left") {
+                            this.displayMessage("Host left. Restarting...", 3000);
+                            this.netplayLeaveRoom();
+                            return;
+                        }
+                        console.log(`Received input from host ${peerId}:`, data);
+                        if (this.gameManager && this.gameManager.functions && this.gameManager.functions.simulateInput) {
+                            this.gameManager.functions.simulateInput(data.player, data.index, data.value);
+                        } else {
+                            console.error("Cannot process input: gameManager.functions.simulateInput is undefined");
+                        }
+                    };
+                };
+            }
+
+            if (this.netplay.owner && this.netplay.localStream) {
+                this.netplay.localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, this.netplay.localStream);
+                });
+
+                const codecs = RTCRtpSender.getCapabilities('video').codecs;
+                const preferredCodecs = codecs.filter(codec => ['video/H264', 'video/VP8'].includes(codec.mimeType));
+                const transceiver = pc.getTransceivers().find(t => t.sender && t.sender.track && t.sender.track.kind === 'video');
+                if (transceiver && preferredCodecs.length) {
+                    try {
+                        transceiver.setCodecPreferences(preferredCodecs);
+                    } catch (error) {
+                        console.error("Failed to set codec preferences:", error);
+                    }
+                }
+            } else {
+                pc.addTransceiver('video', {
+                    direction: 'recvonly'
+                });
+            }
+
+            this.netplay.peerConnections[peerId] = {
+                pc,
+                dataChannel
+            };
+
+            let streamReceived = false;
+            const streamTimeout = setTimeout(() => {
+                if (!streamReceived && !this.netplay.owner) {
+                    this.displayMessage("Failed to receive video stream. Check your network and try again.", 5000);
+                    this.netplayLeaveRoom();
+                }
+            }, 10000);
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.netplay.socket.emit("webrtc-signal", {
+                        target: peerId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            pc.onicecandidateerror = (event) => {
+                console.error("ICE candidate error for peer", peerId, ":", event);
+            };
+
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === "connected") {
+                    this.netplay.webRtcReady = true;
+                } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+                    this.displayMessage("Connection with player lost. Attempting to reconnect...", 3000);
+                    clearTimeout(streamTimeout);
+                    pc.close();
+                    delete this.netplay.peerConnections[peerId];
+                    setTimeout(() => this.netplayCreatePeerConnection(peerId), 2000);
+                }
+            };
+
+            pc.ontrack = (event) => {
+                if (!this.netplay.owner) {
+                    streamReceived = true;
+                    clearTimeout(streamTimeout);
+                    const stream = event.streams[0];
+                    if (!this.netplay.video) {
+                        this.netplay.video = document.createElement('video');
+                        this.netplay.video.muted = true;
+                        this.netplay.video.playsInline = true;
+                    }
+                    this.netplay.video.srcObject = stream;
+                    this.netplay.video.play().catch(() => {
+                        if (this.isMobile) {
+                            this.promptUserInteraction(this.netplay.video);
+                        }
+                    });
+                    this.drawVideoToCanvas();
+                }
+            };
+
+            if (this.netplay.owner && this.netplay.localStream) {
+                pc.createOffer()
+                .then(offer => {
+                    offer.sdp = offer.sdp.replace(/profile-level-id=[0-9a-fA-F]+/, 'profile-level-id=42e01f');
+                    return pc.setLocalDescription(offer);
+                })
+                .then(() => {
+                    this.netplay.socket.emit("webrtc-signal", {
+                        target: peerId,
+                        offer: pc.localDescription
+                    });
+                })
+                .catch(error => console.error("Error creating offer:", error));
+            }
+
+            return pc;
+        };
+
+        this.showVideoOverlay = () => {
+            const videoElement = this.netplay.video;
+            if (!videoElement) {
+                console.error("showVideoOverlay: videoElement is not initialized");
+                return;
+            }
+            console.log("showVideoOverlay called, videoElement exists:", videoElement);
+
+            if (videoElement.parentElement) {
+                console.log("Removing video element from current parent:", videoElement.parentElement);
+                videoElement.parentElement.removeChild(videoElement);
+            }
+
+            videoElement.style.position = "absolute";
+            if (this.isMobile) {
+                videoElement.style.top = "0";
+                videoElement.style.left = "0";
+                videoElement.style.width = "100vw";
+                videoElement.style.height = "100vh";
+                videoElement.style.maxHeight = "100vh";
+            } else {
+                videoElement.style.top = "0";
+                videoElement.style.left = "0";
+                videoElement.style.width = "100%";
+                videoElement.style.height = "100%";
+            }
+            videoElement.style.border = "1px solid white";
+            videoElement.style.zIndex = "1";
+            videoElement.style.display = "";
+            videoElement.style.objectFit = "contain";
+            document.body.appendChild(videoElement);
+            console.log("Video overlay added to DOM, styles:", videoElement.style.cssText);
+
+            const playVideo = async() => {
+                console.log("Attempting to play video, readyState:", videoElement.readyState, "Paused:", videoElement.paused, "Ended:", videoElement.ended, "Muted:", videoElement.muted);
+                try {
+                    await videoElement.play();
+                    console.log("Video playback started successfully, currentTime:", videoElement.currentTime);
+                } catch (error) {
+                    console.error("Video play error:", error);
+                    if (this.isMobile) {
+                        this.promptUserInteraction(videoElement);
+                    } else {
+                        console.log("Autoplay failed on desktop, but user interaction not required for muted video");
+                    }
+                }
+                if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+                    console.warn("Video element has zero dimensions, likely no valid frame:", {
+                        videoWidth: videoElement.videoWidth,
+                        videoHeight: videoElement.videoHeight
+                    });
+                } else {
+                    console.log("Video dimensions:", {
+                        videoWidth: videoElement.videoWidth,
+                        videoHeight: videoElement.videoHeight
+                    });
+                }
+            };
+            playVideo();
+        };
+
+        this.drawVideoToCanvas = () => {
+            const videoElement = this.netplay.video;
+            const canvas = this.netplayCanvas;
+            if (!canvas) {
+                console.error("drawVideoToCanvas: Missing canvas!");
+            }
+            const ctx = canvas.getContext('2d', {
+                alpha: false,
+                willReadFrequently: true
+            });
+
+            if (!videoElement || !ctx) {
+                console.error("drawVideoToCanvas: Missing video, or context!");
+                return;
+            }
+
+            const { width: nativeWidth, height: nativeHeight } = this.getNativeResolution() || {
+                width: 720,
+                height: 700
+            };
+            canvas.width = nativeWidth;
+            canvas.height = nativeHeight;
+
+            const ensureVideoPlaying = async() => {
+                let retries = 0;
+                const maxRetries = 5;
+                while (retries < maxRetries) {
+                    if (videoElement.paused || videoElement.ended) {
+                        try {
+                            await videoElement.play();
+                        } catch (error) {
+                            if (this.isMobile)
+                                this.promptUserInteraction(videoElement);
+                        }
+                    }
+                    if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                        if (!this.netplay.lockedAspectRatio) {
+                            this.netplay.lockedAspectRatio = videoElement.videoWidth / videoElement.videoHeight;
+                            console.log("Locked aspect ratio:", this.netplay.lockedAspectRatio);
+                        }
+                        break;
+                    }
+                    retries++;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+
+                if (retries >= maxRetries) {
+                    this.displayMessage("Failed to initialize video stream", 5000);
+                    this.netplayLeaveRoom();
+                }
+            };
+
+            const drawFrame = () => {
+                if (!this.isNetplay || this.netplay.owner)
+                    return;
+
+                const aspect = this.netplay.lockedAspectRatio || (videoElement.videoWidth / videoElement.videoHeight) || (nativeWidth / nativeHeight);
+
+                if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA && videoElement.videoWidth > 0) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const canvasAspect = nativeWidth / nativeHeight;
+                    let drawWidth,
+                    drawHeight,
+                    offsetX,
+                    offsetY;
+
+                    if (aspect > canvasAspect) {
+                        drawWidth = nativeWidth;
+                        drawHeight = nativeWidth / aspect;
+                        offsetX = 0;
+                        offsetY = 0;
+                    } else {
+                        drawHeight = nativeHeight;
+                        drawWidth = nativeHeight * aspect;
+                        offsetX = (nativeWidth - drawWidth) / 2;
+                        offsetY = 0;
+                    }
+
+                    ctx.drawImage(videoElement, 0, 0, videoElement.videoWidth, videoElement.videoHeight, offsetX, offsetY, drawWidth, drawHeight);
+                }
+
+                requestAnimationFrame(drawFrame);
+            };
+
+            videoElement.addEventListener('loadeddata', () => {
+                ensureVideoPlaying().then(drawFrame);
+            }, {
+                once: true
+            });
+
+            ensureVideoPlaying();
+        };
+
+        this.netplayStartSocketIO = (callback) => {
+            if (!this.netplay.previousPlayers) {
+                this.netplay.previousPlayers = {};
+            }
+            
+            if (typeof io === "undefined") {
+                console.error("Socket.IO client library not loaded. Please include <script src='https://cdn.socket.io/4.5.0/socket.io.min.js'></script>");
+                this.displayMessage("Socket.IO not available", 5000);
+                return;
+            }
+            if (this.netplay.socket && this.netplay.socket.connected) {
+                console.log("Socket already connected, reusing:", this.netplay.socket.id);
+                callback();
+                return;
+            }
+            if (!this.netplay.url) {
+                console.error("Cannot initialize Socket.IO: netplay.url is undefined");
+                this.displayMessage("Network configuration error", 5000);
+                return;
+            }
+            console.log("Initializing new Socket.IO connection to:", this.netplay.url);
             this.netplay.socket = io(this.netplay.url);
-            this.netplay.socket.on("connect", () => callback());
+            this.netplay.socket.on("connect", () => {
+                console.log("Socket.IO connected:", this.netplay.socket.id);
+                callback();
+            });
+            this.netplay.socket.on("connect_error", (error) => {
+                console.error("Socket.IO connection error:", error.message);
+                this.displayMessage("Failed to connect to server: " + error.message, 5000);
+            });
             this.netplay.socket.on("users-updated", (users) => {
-                this.netplay.reset();
-                if (this.debug) console.log(users);
+                const currentPlayers = users || {};
+                const previousPlayerIds = Object.keys(this.netplay.previousPlayers);
+                const currentPlayerIds = Object.keys(currentPlayers);
+
+                // Find who joined
+                currentPlayerIds.forEach(id => {
+                    if (!previousPlayerIds.includes(id) && id !== this.netplay.playerID) {
+                        const playerName = currentPlayers[id].player_name || 'A player';
+                        this.displayMessage(`${playerName} has joined the room.`);
+                    }
+                });
+
+                // Find who left
+                previousPlayerIds.forEach(id => {
+                    if (!currentPlayerIds.includes(id)) {
+                        const playerName = this.netplay.previousPlayers[id].player_name || 'A player';
+                        this.displayMessage(`${playerName} has left the room.`);
+                    }
+                });
+
+                this.netplay.previousPlayers = currentPlayers;
+                
+                console.log("Users updated:", users);
                 this.netplay.players = users;
-                this.netplay.updatePlayersTable();
-                if (this.netplay.owner) this.netplay.sync();
-            })
-            this.netplay.socket.on("disconnect", () => this.netplay.roomLeft());
-            this.netplay.socket.on("data-message", (data) => {
-                this.netplay.dataMessage(data);
-            })
-        }
-        this.netplay.openRoom = (roomName, maxPlayers, password) => {
+                this.netplayUpdatePlayersTable();
+                if (this.netplay.owner) {
+                    console.log("Owner setting up WebRTC for updated users...");
+                    this.netplayInitWebRTCStream().then(() => {
+                        Object.keys(users).forEach(playerId => {
+                            if (playerId !== this.netplay.playerID) {
+                                const socketId = this.netplay.players[playerId].socketId;
+                                if (!socketId) {
+                                    console.error("No socketId for player", playerId, "- WebRTC may fail");
+                                    return;
+                                }
+                                const peerId = socketId;
+                                if (!this.netplay.peerConnections[peerId]) {
+                                    console.log("Creating peer connection for", peerId);
+                                    this.netplayCreatePeerConnection(peerId);
+                                }
+                            }
+                        });
+                    }).catch(error => console.error("Failed to initialize WebRTC stream in users-updated:", error));
+                }
+            });
+            this.netplay.socket.on("disconnect", () => this.netplayLeaveRoom());
+            this.netplay.socket.on("data-message", (data) => this.netplayDataMessage(data));
+            this.netplay.socket.on("webrtc-signal", async(data) => {
+                const { sender, offer, candidate, answer, requestRenegotiate } = data;
+                console.log(`Received WebRTC signal from ${sender}:`, {
+                    offer: !!offer,
+                    answer: !!answer,
+                    candidate: !!candidate,
+                    requestRenegotiate
+                });
+                if (!sender && !requestRenegotiate) {
+                    console.warn("Ignoring signal with no sender and no renegotiation request", data);
+                    return;
+                }
+                if (requestRenegotiate && !sender) {
+                    console.warn("Ignoring renegotiation request with undefined sender", data);
+                    this.netplay.socket.emit("webrtc-signal-error", {
+                        error: "Renegotiation request missing sender",
+                        data
+                    });
+                    return;
+                }
+                let pcData = sender ? this.netplay.peerConnections[sender] : null;
+
+                if (pcData && !pcData.iceCandidateQueue) {
+                    pcData.iceCandidateQueue = [];
+                }
+
+                if (!pcData && sender) {
+                    console.log("No existing peer connection for", sender, "- creating new one");
+                    pcData = {
+                        pc: this.netplayCreatePeerConnection(sender),
+                        dataChannel: null,
+                        iceCandidateQueue: []
+                    }; 
+                    this.netplay.peerConnections[sender] = pcData;
+                }
+                const pc = pcData.pc;
+                try {
+                    if (offer) {
+                        console.log("Processing offer from", sender);
+                        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+                        if (pcData.iceCandidateQueue.length > 0) {
+                            console.log(`Processing ${pcData.iceCandidateQueue.length} queued ICE candidates.`);
+                            for (const queuedCandidate of pcData.iceCandidateQueue) {
+                                await pc.addIceCandidate(new RTCIceCandidate(queuedCandidate));
+                            }
+                            pcData.iceCandidateQueue = []; 
+                        }
+
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        console.log("Sending answer to", sender);
+                        this.netplay.socket.emit("webrtc-signal", {
+                            target: sender,
+                            answer: pc.localDescription
+                        });
+                    } else if (answer) {
+                        console.log("Processing answer from", sender);
+                        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+                        if (pcData.iceCandidateQueue.length > 0) {
+                            console.log(`Processing ${pcData.iceCandidateQueue.length} queued ICE candidates.`);
+                            for (const queuedCandidate of pcData.iceCandidateQueue) {
+                                await pc.addIceCandidate(new RTCIceCandidate(queuedCandidate));
+                            }
+                            pcData.iceCandidateQueue = []; 
+                        }
+
+                    } else if (candidate) {
+                        if (pc.remoteDescription) {
+                            console.log("Adding ICE candidate from", sender);
+                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        } else {
+                            console.log("Remote description not set. Queueing ICE candidate from", sender);
+                            pcData.iceCandidateQueue.push(candidate);
+                        }
+                    } else if (requestRenegotiate && this.netplay.owner) {
+                        console.log("Owner handling renegotiation request...");
+                        Object.keys(this.netplay.peerConnections).forEach(peerId => {
+                            if (peerId && this.netplay.peerConnections[peerId]) {
+                                const peerConn = this.netplay.peerConnections[peerId].pc;
+                                console.log("Closing and recreating peer connection for", peerId);
+                                peerConn.close();
+                                delete this.netplay.peerConnections[peerId];
+                                this.netplayCreatePeerConnection(peerId);
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error("WebRTC signaling error:", error);
+                }
+            });
+        };
+
+        this.netplayUpdatePlayersTable = () => {
+            if (!this.netplay.playerTable) {
+                console.error("netplay.playerTable is undefined");
+                return;
+            }
+            const table = this.netplay.playerTable;
+            table.innerHTML = "";
+
+            const playerCount = Object.keys(this.netplay.players).length;
+            const maxPlayers = this.netplay.maxPlayers || "?";
+
+            const addToTable = (playerNumber, playerName, statusText) => {
+                const row = this.createElement("tr");
+                const addCell = (text) => {
+                    const item = this.createElement("td");
+                    item.innerText = text;
+                    row.appendChild(item);
+                    return item;
+                };
+                addCell(playerNumber).style.width = "80px";
+                addCell(playerName);
+                addCell(statusText).style.width = "80px";
+                table.appendChild(row);
+            };
+
+            let i = 0;
+            for (const k in this.netplay.players) {
+                const playerNumber = i + 1;
+                const playerName = this.netplay.players[k].player_name || "Unknown";
+                const statusText = (i === 0) ? `${playerCount}/${maxPlayers}` : "";
+                addToTable(playerNumber, playerName, statusText);
+                i++;
+            }
+        };
+
+        this.netplayOpenRoom = (roomName, maxPlayers, password) => {
             const sessionid = guidGenerator();
             this.netplay.playerID = guidGenerator();
             this.netplay.players = {};
+            this.netplay.maxPlayers = maxPlayers;
             this.netplay.extra = {
                 domain: window.location.host,
                 game_id: this.config.gameId,
@@ -5415,31 +6637,29 @@ class EmulatorJS {
                 player_name: this.netplay.name,
                 userid: this.netplay.playerID,
                 sessionid: sessionid
-            }
+            };
             this.netplay.players[this.netplay.playerID] = this.netplay.extra;
-            this.netplay.users = {};
-
-            this.netplay.startSocketIO((error) => {
+            this.netplay.owner = true;
+            this.netplayStartSocketIO(() => {
                 this.netplay.socket.emit("open-room", {
                     extra: this.netplay.extra,
                     maxPlayers: maxPlayers,
                     password: password
                 }, (error) => {
                     if (error) {
-                        if (this.debug) console.log("error: ", error);
+                        console.error("Error opening room:", error);
+                        this.displayMessage("Failed to create room: " + error, 5000);
                         return;
                     }
-                    this.netplay.roomJoined(true, roomName, password, sessionid);
-                })
+                    this.netplayRoomJoined(true, roomName, password, sessionid);
+                });
             });
-        }
-        this.netplay.leaveRoom = () => {
-            if (this.debug) console.log("asd");
-            this.netplay.roomLeft();
-        }
-        this.netplay.joinRoom = (sessionid, roomName) => {
+        };
+
+        this.netplayJoinRoom = (sessionid, roomName, maxPlayers, password) => {
             this.netplay.playerID = guidGenerator();
             this.netplay.players = {};
+            this.netplay.maxPlayers = maxPlayers;
             this.netplay.extra = {
                 domain: window.location.host,
                 game_id: this.config.gameId,
@@ -5447,316 +6667,561 @@ class EmulatorJS {
                 player_name: this.netplay.name,
                 userid: this.netplay.playerID,
                 sessionid: sessionid
-            }
+            };
             this.netplay.players[this.netplay.playerID] = this.netplay.extra;
-
-            this.netplay.startSocketIO((error) => {
+            this.netplay.owner = false;
+            this.netplayStartSocketIO(() => {
                 this.netplay.socket.emit("join-room", {
-                    extra: this.netplay.extra//,
-                    //password: password
+                    extra: this.netplay.extra,
+                    password: password 
                 }, (error, users) => {
                     if (error) {
-                        if (this.debug) console.log("error: ", error);
+                        console.error("Error joining room:", error);
+                        alert("Error joining room: " + error);
                         return;
                     }
                     this.netplay.players = users;
-                    //this.netplay.roomJoined(false, roomName, password, sessionid);
-                    this.netplay.roomJoined(false, roomName, "", sessionid);
-                })
+                    this.netplayRoomJoined(false, roomName, password, sessionid);
+                });
             });
-        }
-        this.netplay.roomJoined = (isOwner, roomName, password, roomId) => {
-            //Will already assume this.netplay.players has been refreshed
+        };
+
+        this.netplayRoomJoined = (isOwner, roomName, password, roomId) => {
+            EJS_INSTANCE.updateNetplayUI(true);
+
+            if (!this.netplay || !this.canvas || !this.elements || !this.elements.parent) {
+                console.error("netplayRoomJoined: Required objects are undefined", {
+                    netplay: !!this.netplay,
+                    canvas: !!this.canvas,
+                    elements: !!this.elements,
+                    parent: !!(this.elements && this.elements.parent)
+                });
+                this.displayMessage("Failed to initialize netplay room", 5000);
+                return;
+            }
+
+            if (!this.netplayCanvas) {
+                this.netplayCanvas = this.createElement("canvas");
+                this.netplayCanvas.classList.add("ejs_canvas");
+                this.netplayCanvas.style.display = "none";
+                this.netplayCanvas.style.position = "absolute";
+                this.netplayCanvas.style.top = "0";
+                this.netplayCanvas.style.left = "0";
+                this.netplayCanvas.style.zIndex = "5";
+                this.netplayCanvas.style.objectFit = "contain";
+                this.netplayCanvas.style.width = "100%";
+                this.netplayCanvas.style.height = "100%";
+                this.netplayCanvas.style.objectPosition = "top";
+            }
+
             this.isNetplay = true;
             this.netplay.inputs = {};
             this.netplay.owner = isOwner;
-            if (this.debug) console.log(this.netplay.extra);
-            this.netplay.roomNameElem.innerText = roomName;
-            this.netplay.tabs[0].style.display = "none";
-            this.netplay.tabs[1].style.display = "";
-            if (password) {
-                this.netplay.passwordElem.style.display = "";
-                this.netplay.passwordElem.innerText = this.localization("Password") + ": " + password
+            console.log("Room joined with extra:", this.netplay.extra);
+
+            if (this.netplay.roomNameElem) {
+                this.netplay.roomNameElem.innerText = roomName;
+            }
+            if (this.netplay.tabs && this.netplay.tabs[0] && this.netplay.tabs[1]) {
+                this.netplay.tabs[0].style.display = "none";
+                this.netplay.tabs[1].style.display = "";
+            }
+            if (this.netplay.passwordElem) {
+                if (password) {
+                    this.netplay.passwordElem.style.display = "";
+                    this.netplay.passwordElem.innerText = this.localization("Password") + ": " + password;
+                } else {
+                    this.netplay.passwordElem.style.display = "none";
+                }
+            }
+            if (this.netplay.createButton) {
+                this.netplay.createButton.innerText = this.localization("Leave Room");
+            }
+            this.netplayUpdatePlayersTable();
+
+            this.elements.parent.style.width = "100vw";
+            this.elements.parent.style.height = "100vh";
+            this.elements.parent.style.position = "relative";
+
+            const { width: nativeWidth, height: nativeHeight } = this.getNativeResolution() || {
+                width: 700,
+                height: 720
+            };
+
+            if (!this.netplay.owner) {
+                this.canvas.style.display = "none";
+                if (!this.netplayCanvas.parentElement) {
+                    this.elements.parent.appendChild(this.netplayCanvas);
+                    console.log("Appended netplayCanvas to this.elements.parent:", this.elements.parent);
+                }
+                this.netplayCanvas.width = nativeWidth;
+                this.netplayCanvas.height = nativeHeight;
+                Object.assign(this.netplayCanvas.style, {
+                    position: 'absolute', 
+                    top: '0',
+                    left: '0',
+                    width: '100%',
+                    height: 'auto',
+                    maxHeight: '100%',
+                    zIndex: '5',
+                    display: 'block',
+                    pointerEvents: 'none'
+                });
+
+                const parentStyles = window.getComputedStyle(this.elements.parent);
+                console.log("Parent container styles:", {
+                    display: parentStyles.display,
+                    visibility: parentStyles.visibility,
+                    opacity: parentStyles.opacity,
+                    position: parentStyles.position,
+                    zIndex: parentStyles.zIndex
+                });
+
+                if (this.elements.bottomBar && this.elements.bottomBar.cheat && this.elements.bottomBar.cheat[0]) {
+                    this.netplay.oldStyles = [this.elements.bottomBar.cheat[0].style.display];
+                    this.elements.bottomBar.cheat[0].style.display = "none";
+                }
+                if (this.gameManager && this.gameManager.resetCheat) {
+                    this.gameManager.resetCheat();
+                }
+                console.log("Player 2 joined, awaiting WebRTC stream...");
+                this.elements.parent.focus();
+
+                if (this.gameManager && this.gameManager.functions && this.gameManager.functions.simulateInput) {
+                    const originalSimulateInput = this.gameManager.functions.simulateInput;
+                    this.gameManager.functions.simulateInput = (player, index, value) => {
+                        const playerIndex = this.netplayGetUserIndex();
+                        console.log("Player 2 input:", {
+                            player,
+                            index,
+                            value,
+                            playerIndex
+                        });
+                       Object.values(this.netplay.peerConnections).forEach((pcData) => {
+                        if (
+                            pcData.pc &&
+                            pcData.pc.connectionState === "connected" &&
+                            pcData.dataChannel && 
+                            pcData.dataChannel.readyState === "open"
+                        ) {
+                        pcData.dataChannel.send(
+                        JSON.stringify({
+                            player: playerIndex,
+                            index,
+                            value,
+                                }));
+                            }
+                        });
+                    };
+                    this.netplayLeaveRoom = (originalLeaveRoom => {
+                        return function () {
+                            originalLeaveRoom.call(this);
+                            this.gameManager.functions.simulateInput = originalSimulateInput;
+                            if (this.netplay.video && this.netplay.video.parentElement) {
+                                this.netplay.video.parentElement.removeChild(this.netplay.video);
+                            }
+                        };
+                    })(this.netplayLeaveRoom);
+                } else {
+                    console.error("Cannot override simulateInput: gameManager.functions.simulateInput is undefined");
+                }
+
+                if (this.isMobile && this.gamepadElement) {
+                    const newGamepad = this.gamepadElement.cloneNode(true);
+                    this.gamepadElement.parentNode.replaceChild(newGamepad, this.gamepadElement);
+                    this.gamepadElement = newGamepad;
+                    Object.assign(this.gamepadElement.style, {
+                        zIndex: "1000",
+                        position: "absolute",
+                        pointerEvents: "auto"
+                    });
+
+                    this.gamepadElement.addEventListener("touchstart", (e) => {
+                        e.preventDefault();
+                        const button = e.target.closest('[data-button]');
+                        if (button && this.gameManager && this.gameManager.functions && this.gameManager.functions.simulateInput) {
+                            this.gameManager.functions.simulateInput(0, button.dataset.button, 1);
+                        }
+                    }, {
+                        passive: false
+                    });
+
+                    this.gamepadElement.addEventListener("touchend", (e) => {
+                        e.preventDefault();
+                        const button = e.target.closest('[data-button]');
+                        if (button && this.gameManager && this.gameManager.functions && this.gameManager.functions.simulateInput) {
+                            this.gameManager.functions.simulateInput(0, button.dataset.button, 0);
+                        }
+                    }, {
+                        passive: false
+                    });
+
+                    this.gamepadElement.focus();
+                }
+                const updateGamepadStyles = () => {
+                    if (this.isMobile && this.gamepadElement) {
+                        Object.assign(this.gamepadElement.style, {
+                            zIndex: "1000",
+                            position: "absolute",
+                            pointerEvents: "auto"
+                        });
+                        this.netplayCanvas.style.pointerEvents = "none";
+                        this.netplayCanvas.width = nativeWidth;
+                        this.netplayCanvas.height = nativeHeight;
+                        this.netplayCanvas.style.width = "100%";
+                        this.netplayCanvas.style.height = "100%";
+                    }
+                };
+                document.addEventListener("fullscreenchange", updateGamepadStyles);
+                document.addEventListener("webkitfullscreenchange", updateGamepadStyles);
+
+                setTimeout(() => {
+                    if (!this.netplay.webRtcReady) {
+                        console.error("WebRTC connection not established after timeout");
+                        this.displayMessage("Failed to connect to Player 1. Please check your network and try again.", 5000);
+                        if (this.interactionOverlay) {
+                            this.interactionOverlay.remove();
+                            this.interactionOverlay = null;
+                        }
+                        this.netplayLeaveRoom();
+                    }
+                }, 10000);
             } else {
+                if (this.canvas) {
+                    this.canvas.width = nativeWidth;
+                    this.canvas.height = nativeHeight;
+                    this.canvas.style.display = "block";
+                    this.canvas.style.objectFit = "contain";
+                }
+                if (this.netplayCanvas) {
+                    this.netplayCanvas.style.display = "none";
+                }
+                if (this.netplay.videoContainer) {
+                    this.netplay.videoContainer.style.display = "none";
+                }
+                if (this.elements.bottomBar && this.elements.bottomBar.cheat && this.elements.bottomBar.cheat[0]) {
+                    this.netplay.oldStyles = [this.elements.bottomBar.cheat[0].style.display];
+                }
+
+                if (this.netplay.owner && this.Module && this.Module.setCanvasSize) {
+                    this.Module.setCanvasSize(nativeWidth, nativeHeight);
+                }
+
+                this.netplay.lockedAspectRatio = nativeWidth / nativeHeight;
+                const resizeCanvasWithAspect = () => {
+                    const aspect = this.netplay.lockedAspectRatio;
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+                    let newWidth,
+                    newHeight;
+
+                    if (vw / vh > aspect) {
+                        newHeight = vh;
+                        newWidth = vh * aspect;
+                    } else {
+                        newWidth = vw;
+                        newHeight = vw / aspect;
+                    }
+
+                    if (this.canvas) {
+                        Object.assign(this.canvas.style, {
+                            width: `${newWidth}px`,
+                            height: `${newHeight}px`,
+                            display: "block",
+                            objectFit: "contain"
+                        });
+
+                        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+
+                        if (isFullscreen) {
+                            Object.assign(this.canvas.style, {
+                                position: "absolute",
+                                top: "0",
+                                left: "50%",
+                                transform: "translateX(-50%)"
+                            });
+                        } else {
+                            Object.assign(this.canvas.style, {
+                                position: "",
+                                left: "",
+                                top: "",
+                                transform: ""
+                            });
+                        }
+                    }
+                };
+                this._netplayResizeCanvas = resizeCanvasWithAspect;
+                window.addEventListener("resize", resizeCanvasWithAspect);
+                document.addEventListener("fullscreenchange", resizeCanvasWithAspect);
+                document.addEventListener("webkitfullscreenchange", resizeCanvasWithAspect);
+                resizeCanvasWithAspect();
+                window.dispatchEvent(new Event('resize'));
+            }
+        };
+
+        this.netplayLeaveRoom = () => {
+            EJS_INSTANCE.updateNetplayUI(false);
+
+            console.log("Leaving netplay room...");
+
+            if (this.netplay.owner && this.netplaySendMessage) {
+                this.netplaySendMessage({
+                    type: "host-left"
+                });
+            }
+
+            if (this.netplay.socket && this.netplay.socket.connected) {
+                this.netplay.socket.emit('leave-room');
+            }
+
+            if (this.netplay.socket) {
+                this.netplay.socket.disconnect();
+                this.netplay.socket = null;
+            }
+
+            if (this.netplay.localStream) {
+                this.netplay.localStream.getTracks().forEach(track => track.stop());
+                this.netplay.localStream = null;
+            }
+
+            if (this.netplay.peerConnections) {
+                Object.values(this.netplay.peerConnections).forEach(pcData => {
+                    if (pcData.pc)
+                        pcData.pc.close();
+                });
+                this.netplay.peerConnections = {};
+            }
+
+            if (this.netplayCanvas && this.netplayCanvas.parentElement) {
+                this.netplayCanvas.parentElement.removeChild(this.netplayCanvas);
+                this.netplayCanvas.style.display = "none";
+            }
+            if (this.netplay.video && this.netplay.video.parentElement) {
+                this.netplay.video.parentElement.removeChild(this.netplay.video);
+                this.netplay.video.srcObject = null;
+                this.netplay.video = null;
+            }
+            if (this.netplay.videoContainer) {
+                this.netplay.videoContainer.style.display = "none";
+            }
+
+            if (this.canvas) {
+                Object.assign(this.canvas.style, {
+                    display: "block",
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    position: "absolute",
+                    top: "0",
+                    left: "0",
+                    transform: "none"
+                });
+            }
+
+            if (this.netplay.createButton) {
+                this.netplay.createButton.innerText = this.localization("Create Room");
+            }
+            if (this.netplay.tabs) {
+                this.netplay.tabs[0].style.display = "";
+                this.netplay.tabs[1].style.display = "none";
+            }
+            if (this.netplay.roomNameElem) {
+                this.netplay.roomNameElem.innerText = "";
+            }
+            if (this.netplay.passwordElem) {
                 this.netplay.passwordElem.style.display = "none";
+                this.netplay.passwordElem.innerText = "";
             }
-            this.netplay.createButton.innerText = this.localization("Leave Room");
-            this.netplay.updatePlayersTable();
-            if (!this.netplay.owner) {
-                this.netplay.oldStyles = [
-                    this.elements.bottomBar.cheat[0].style.display,
-                    this.elements.bottomBar.playPause[0].style.display,
-                    this.elements.bottomBar.playPause[1].style.display,
-                    this.elements.bottomBar.restart[0].style.display,
-                    this.elements.bottomBar.loadState[0].style.display,
-                    this.elements.bottomBar.saveState[0].style.display,
-                    this.elements.bottomBar.saveSavFiles[0].style.display,
-                    this.elements.bottomBar.loadSavFiles[0].style.display,
-                    this.elements.contextMenu.save.style.display,
-                    this.elements.contextMenu.load.style.display
-                ]
-                this.elements.bottomBar.cheat[0].style.display = "none";
-                this.elements.bottomBar.playPause[0].style.display = "none";
-                this.elements.bottomBar.playPause[1].style.display = "none";
-                this.elements.bottomBar.restart[0].style.display = "none";
-                this.elements.bottomBar.loadState[0].style.display = "none";
-                this.elements.bottomBar.saveState[0].style.display = "none";
-                this.elements.bottomBar.saveSavFiles[0].style.display = "none";
-                this.elements.bottomBar.loadSavFiles[0].style.display = "none";
-                this.elements.contextMenu.save.style.display = "none";
-                this.elements.contextMenu.load.style.display = "none";
-                this.gameManager.resetCheat();
-            } else {
-                this.netplay.oldStyles = [
-                    this.elements.bottomBar.cheat[0].style.display
-                ]
+            if (this.netplay.playerTable) {
+                this.netplay.playerTable.innerHTML = "";
             }
-            this.elements.bottomBar.cheat[0].style.display = "none";
-        }
-        this.netplay.updatePlayersTable = () => {
-            const table = this.netplay.playerTable;
-            table.innerHTML = "";
-            const addToTable = (num, playerName) => {
-                const row = this.createElement("tr");
-                const addToHeader = (text) => {
-                    const item = this.createElement("td");
-                    item.innerText = text;
-                    row.appendChild(item);
-                    return item;
-                }
-                addToHeader(num).style.width = "80px";
-                addToHeader(playerName);
-                addToHeader("").style.width = "80px"; //"join" button
-                table.appendChild(row);
+
+            if (this.netplay.oldStyles && this.elements.bottomBar && this.elements.bottomBar.cheat && this.elements.bottomBar.cheat[0]) {
+                this.elements.bottomBar.cheat[0].style.display = this.netplay.oldStyles[0] || "";
             }
-            let i = 1;
-            for (const k in this.netplay.players) {
-                addToTable(i, this.netplay.players[k].player_name);
-                i++;
+
+            if (this._netplayResizeCanvas) {
+                window.removeEventListener("resize", this._netplayResizeCanvas);
+                document.removeEventListener("fullscreenchange", this._netplayResizeCanvas);
+                document.removeEventListener("webkitfullscreenchange", this._netplayResizeCanvas);
+                this._netplayResizeCanvas = null;
             }
-        }
-        this.netplay.roomLeft = () => {
+
+            // Restore the original input function when leaving the room
+            if (this.netplay.originalSimulateInput && this.gameManager && this.gameManager.functions) {
+                this.gameManager.functions.simulateInput = this.netplay.originalSimulateInput;
+                this.netplay.originalSimulateInput = null;
+            }
+
             this.isNetplay = false;
-            this.netplay.tabs[0].style.display = "";
-            this.netplay.tabs[1].style.display = "none";
-            this.netplay.extra = null;
+            this.netplay.owner = false;
+            this.netplay.players = {};
             this.netplay.playerID = null;
-            this.netplay.createButton.innerText = this.localization("Create a Room");
-            this.netplay.socket.disconnect();
-            this.elements.bottomBar.cheat[0].style.display = this.netplay.oldStyles[0];
-            if (!this.netplay.owner) {
-                this.elements.bottomBar.playPause[0].style.display = this.netplay.oldStyles[1];
-                this.elements.bottomBar.playPause[1].style.display = this.netplay.oldStyles[2];
-                this.elements.bottomBar.restart[0].style.display = this.netplay.oldStyles[3];
-                this.elements.bottomBar.loadState[0].style.display = this.netplay.oldStyles[4];
-                this.elements.bottomBar.saveState[0].style.display = this.netplay.oldStyles[5];
-                this.elements.bottomBar.saveSavFiles[0].style.display = this.netplay.oldStyles[6];
-                this.elements.bottomBar.loadSavFiles[0].style.display = this.netplay.oldStyles[7];
-                this.elements.contextMenu.save.style.display = this.netplay.oldStyles[8];
-                this.elements.contextMenu.load.style.display = this.netplay.oldStyles[9];
+            this.netplay.inputs = {};
+            this.netplay.inputsData = {};
+            this.netplay.webRtcReady = false;
+            this.netplay.lockedAspectRatio = null;
+            this.player = 1;
+
+            if (this.originalControls) {
+                this.controls = JSON.parse(JSON.stringify(this.originalControls));
+                this.originalControls = null;
             }
-            this.updateCheatUI();
-        }
-        this.netplay.setLoading = (loading) => {
-            if (this.debug) console.log("loading:", loading);
-        }
-        let syncing = false;
-        this.netplay.sync = async () => {
-            if (syncing) return;
-            syncing = true;
-            if (this.debug) console.log("sync")
-            this.netplay.ready = 0;
-            const state = this.gameManager.getState();
-            this.netplay.sendMessage({
-                state: state
-            });
-            this.netplay.setLoading(true);
-            this.pause(true);
-            this.netplay.ready++;
-            this.netplay.current_frame = 0;
-            if (this.netplay.ready === this.netplay.getUserCount()) {
-                this.play(true);
+
+            if (this.isMobile && this.gamepadElement) {
+                Object.assign(this.gamepadElement.style, {
+                    zIndex: "1000",
+                    position: "absolute",
+                    pointerEvents: "auto"
+                });
             }
-            syncing = false;
-        }
-        this.netplay.getUserIndex = (user) => {
-            let i = 0;
-            for (const k in this.netplay.players) {
-                if (k === user) return i;
-                i++;
+
+            if (this.gameManager && this.gameManager.restart) {
+                this.gameManager.restart();
+            } else if (this.startGame) {
+                this.startGame();
             }
-            return -1;
-        }
-        this.netplay.getUserCount = () => {
-            let i = 0;
-            for (const k in this.netplay.players) i++;
-            return i;
-        }
-        let justReset = false;
-        this.netplay.dataMessage = (data) => {
-            //console.log(data);
-            if (data.sync === true && this.netplay.owner) {
-                this.netplay.sync();
-            }
-            if (data.state) {
-                this.netplay.wait = true;
-                this.netplay.setLoading(true);
-                this.pause(true);
-                this.gameManager.loadState(new Uint8Array(data.state));
-                this.netplay.sendMessage({ ready: true });
-            }
-            if (data.play && !this.owner) {
-                this.play(true);
-            }
-            if (data.pause && !this.owner) {
-                this.pause(true);
-            }
-            if (data.ready && this.netplay.owner) {
-                this.netplay.ready++;
-                if (this.netplay.ready === this.netplay.getUserCount()) {
-                    this.netplay.sendMessage({ readyready: true });
-                    this.netplay.reset();
-                    setTimeout(() => this.play(true), 48);
-                    this.netplay.setLoading(false);
-                }
-            }
-            if (data.readyready) {
-                this.netplay.setLoading(false);
-                this.netplay.reset();
-                this.play(true);
-            }
-            if (data.shortPause) console.log(data.shortPause);
-            if (data.shortPause && data.shortPause !== this.netplay.playerID) {
-                this.pause(true);
-                this.netplay.wait = true;
-                setTimeout(() => this.play(true), 48);
-            }
+
+            this.displayMessage("Left the room", 3000);
+        };
+
+        this.netplayDataMessage = function (data) {
             if (data["sync-control"]) {
                 data["sync-control"].forEach((value) => {
                     let inFrame = parseInt(value.frame);
-                    let frame = this.netplay.currentFrame;
-                    if (!value.connected_input || value.connected_input[0] < 0) return;
-                    //if (value.connected_input[0] === this.netplay.getUserIndex(this.netplay.playerID)) return;
-                    console.log(value, inFrame, frame);
-                    if (inFrame === frame) {
-                        inFrame++;
-                        this.gameManager.functions.simulateInput(value.connected_input[0], value.connected_input[1], value.connected_input[2]);
-                    }
-                    this.netplay.inputsData[inFrame] || (this.netplay.inputsData[inFrame] = []);
-                    this.netplay.inputsData[frame] || (this.netplay.inputsData[frame] = []);
+                    if (!value.connected_input || value.connected_input[0] < 0)
+                        return;
+                    this.netplay.inputsData[inFrame] = this.netplay.inputsData[inFrame] || [];
+                    this.netplay.inputsData[inFrame].push(value);
+                    this.netplaySendMessage({
+                        frameAck: inFrame
+                    });
                     if (this.netplay.owner) {
-                        this.netplay.inputsData[frame].push(value);
-                        this.gameManager.functions.simulateInput(value.connected_input[0], value.connected_input[1], value.connected_input[2]);
-                        if (frame - 10 >= inFrame) {
-                            this.netplay.wait = true;
-                            this.pause(true);
-                            setTimeout(() => {
-                                this.play(true);
-                                this.netplay.wait = false;
-                            }, 48)
-                        }
-                    } else {
-                        this.netplay.inputsData[inFrame].push(value);
-                        if (this.netplay.inputsData[frame]) {
-                            this.play(true);
-                        }
-                        if (frame + 10 <= inFrame && inFrame > this.netplay.init_frame + 100) {
-                            this.netplay.sendMessage({ shortPause: this.netplay.playerID });
+                        console.log("Owner processing input:", value.connected_input);
+                        if (this.gameManager && this.gameManager.functions && this.gameManager.functions.simulateInput) {
+                            this.gameManager.functions.simulateInput(
+                                value.connected_input[0],
+                                value.connected_input[1],
+                                value.connected_input[2]);
+                        } else {
+                            console.error("Cannot process input: gameManager.functions.simulateInput is undefined");
                         }
                     }
                 });
             }
-            if (data.restart) {
-                this.gameManager.restart();
-                this.netplay.reset();
-                this.play(true);
-            }
-        }
-        this.netplay.simulateInput = (player, index, value, resp) => {
-            if (!this.isNetplay) return;
-            if (player !== 0 && !resp) return;
-            player = this.netplay.getUserIndex(this.netplay.playerID);
-            let frame = this.netplay.currentFrame;
-            if (this.netplay.owner) {
-                if (!this.netplay.inputsData[frame]) {
-                    this.netplay.inputsData[frame] = [];
+            if (data.frameData) {
+                console.log("Received frame data on Player 2:", data.frameData);
+                if (!this.canvas) {
+                    console.error("Canvas unavailable for frame data processing");
+                    return;
                 }
-                this.netplay.inputsData[frame].push({
-                    frame: frame,
-                    connected_input: [player, index, value]
-                })
-                this.gameManager.functions.simulateInput(player, index, value);
-            } else {
-                this.netplay.sendMessage({
-                    "sync-control": [{
-                        frame: frame + 10,
-                        connected_input: [player, index, value]
-                    }]
-                })
+                const ctx = this.canvas.getContext('2d');
+                if (!ctx) {
+                    console.error("Canvas context unavailable for frame data processing");
+                    return;
+                }
+                if (data.frameData.pixelSample.every(v => v === 0)) {
+                    console.warn("Frame data indicates black screen, attempting reconstruction");
+                    if (this.reconstructFrame) {
+                        this.reconstructFrame(data.frameData.inputs);
+                    } else {
+                        console.error("reconstructFrame is undefined");
+                    }
+                } else {
+                    console.log("Frame data indicates content, relying on WebRTC stream");
+                }
             }
-        }
-        this.netplay.sendMessage = (data) => {
-            this.netplay.socket.emit("data-message", data);
-        }
-        this.netplay.reset = () => {
-            this.netplay.init_frame = this.netplay.currentFrame;
+        };
+
+        this.netplaySendMessage = (data) => {
+            if (this.netplay.socket && this.netplay.socket.connected) {
+                this.netplay.socket.emit("data-message", data);
+                console.log("Sent data message:", data);
+            } else {
+                console.error("Cannot send message: Socket is not connected");
+            }
+        };
+
+        this.netplayReset = () => {
+            this.netplay.init_frame = this.gameManager ? this.gameManager.getFrameNum() : 0;
+            this.netplay.currentFrame = 0;
             this.netplay.inputsData = {};
-        }
-        //let fps;
-        //let lastTime;
+            this.netplay.syncing = false;
+        };
+
+        this.netplayInitModulePostMainLoop = () => {
+            if (this.isNetplay && !this.netplay.owner) {
+                return; 
+            }
+
+            this.netplay.currentFrame = parseInt(this.gameManager ? this.gameManager.getFrameNum() : 0) - (this.netplay.init_frame || 0);
+            if (!this.isNetplay)
+                return;
+
+            if (this.netplay.owner) {
+                let to_send = [];
+                let i = this.netplay.currentFrame;
+                if (this.netplay.inputsData[i]) {
+                    this.netplay.inputsData[i].forEach((value) => {
+                        if (this.gameManager && this.gameManager.functions && this.gameManager.functions.simulateInput) {
+                            this.gameManager.functions.simulateInput(
+                                value.connected_input[0],
+                                value.connected_input[1],
+                                value.connected_input[2]);
+                        }
+                        value.frame = this.netplay.currentFrame + 20;
+                        to_send.push(value);
+                    });
+                    this.netplaySendMessage({
+                        "sync-control": to_send
+                    });
+                    delete this.netplay.inputsData[i];
+                }
+            }
+        };
+
+        this.netplay.updateList = {
+            start: this.netplayUpdateListStart,
+            stop: this.netplayUpdateListStop
+        };
+        this.netplay.showOpenRoomDialog = this.netplayShowOpenRoomDialog;
+        this.netplay.openRoom = this.netplayOpenRoom;
+        this.netplay.joinRoom = this.netplayJoinRoom;
+        this.netplay.leaveRoom = this.netplayLeaveRoom;
+        this.netplay.sendMessage = this.netplaySendMessage;
+        this.netplay.updatePlayersTable = this.netplayUpdatePlayersTable;
+        this.netplay.createPeerConnection = this.netplayCreatePeerConnection;
+        this.netplay.initWebRTCStream = this.netplayInitWebRTCStream;
+        this.netplay.roomJoined = this.netplayRoomJoined;
+
+        this.netplay = this.netplay || {};
         this.netplay.init_frame = 0;
         this.netplay.currentFrame = 0;
         this.netplay.inputsData = {};
-        this.Module.postMainLoop = () => {
-            //const newTime = window.performance.now();
-            //fps = 1000 / (newTime - lastTime);
-            //console.log(fps);
-            //lastTime = newTime;
-            //frame syncing - working
-            //control syncing - broken
-            this.netplay.currentFrame = parseInt(this.gameManager.getFrameNum()) - this.netplay.init_frame;
-            if (!this.isNetplay) return;
-            if (this.netplay.owner) {
-                let to_send = [];
-                let i = this.netplay.currentFrame - 1;
-                this.netplay.inputsData[i] ? this.netplay.inputsData[i].forEach((value) => {
-                    value.frame += 10;
-                    to_send.push(value);
-                }) : to_send.push({ frame: i + 10 });
-                this.netplay.sendMessage({ "sync-control": to_send });
-            } else {
-                if (this.netplay.currentFrame <= 0 || this.netplay.inputsData[this.netplay.currentFrame]) {
-                    this.netplay.wait = false;
-                    this.play();
-                    this.netplay.inputsData[this.netplay.currentFrame].forEach((value) => {
-                        if (!value.connected_input) return;
-                        console.log(value.connected_input);
-                        this.gameManager.functions.simulateInput(value.connected_input[0], value.connected_input[1], value.connected_input[2]);
-                    })
-                } else if (!this.netplay.syncing) {
-                    console.log("sync");
-                    this.pause(true);
-                    this.netplay.sendMessage({ sync: true });
-                    this.netplay.syncing = true;
-                }
-            }
-            if (this.netplay.currentFrame % 100 === 0) {
-                Object.keys(this.netplay.inputsData).forEach(value => {
-                    if (value < this.netplay.currentFrame - 50) {
-                        this.netplay.inputsData[value] = null;
-                        delete this.netplay.inputsData[value];
-                    }
-                })
-            }
+        this.netplay.syncing = false;
+        this.netplay.ready = 0;
+        this.netplay.webRtcReady = false;
+        this.netplay.peerConnections = this.netplay.peerConnections || {};
+
+        this.netplay.url = this.config.netplayUrl || window.EJS_netplayUrl;
+
+        if (!this.netplay.url) {
+            if (this.debug) console.error("netplayUrl is not defined. Please set it in EJS_config or as a global EJS_netplayUrl variable.");
+            this.displayMessage("Network configuration error: netplay URL is not set.", 5000);
+            return; 
         }
 
-        this.netplay.updateList = {
-            start: () => {
-                this.netplay.updateList.interval = setInterval(this.netplay.updateTableList.bind(this), 1000);
-            },
-            stop: () => {
-                clearInterval(this.netplay.updateList.interval);
-            }
+        while (this.netplay.url.endsWith("/")) {
+            this.netplay.url = this.netplay.url.substring(0, this.netplay.url.length - 1);
+        }
+        this.netplay.current_frame = 0;
+
+        if (this.gameManager && this.gameManager.Module) {
+            this.gameManager.Module.postMainLoop = this.netplayInitModulePostMainLoop.bind(this);
+        } else if (this.Module) {
+            this.Module.postMainLoop = this.netplayInitModulePostMainLoop.bind(this);
+        } else if (this.debug) {
+            console.warn("Module is undefined. postMainLoop will not be set.");
         }
     }
     createCheatsMenu() {
@@ -6020,10 +7485,12 @@ class EmulatorJS {
         }
     }
 
-    async takeScreenshot(source, format, upscale) {
+    takeScreenshot(source, format, upscale) {
         return new Promise((resolve) => {
-            this.screenshot((blob, format) => {
-                resolve({ blob, format });
+            this.screenshot(async (blob, returnFormat) => {
+                const arrayBuffer = await blob.arrayBuffer();
+                const uint8 = new Uint8Array(arrayBuffer);
+                resolve({ screenshot: uint8, format: returnFormat });
             }, source, format, upscale);
         });
     }
@@ -6034,7 +7501,7 @@ class EmulatorJS {
         if (videoTracks.length !== 0) {
             videoTrack = videoTracks[0];
         } else {
-            console.error("Unable to capture video stream");
+            if (this.debug) console.error("Unable to capture video stream");
             return null;
         }
 
@@ -6153,6 +7620,36 @@ class EmulatorJS {
         recorder.start();
 
         return recorder;
+    }
+
+    enableSaveUpdateEvent() {
+        function withGameSaveHash(saveFile, callback) {
+            if (saveFile) {
+                this.utils.cyrb53(saveFile).then(digest => callback(digest, saveFile));
+            } else {
+                console.warn("Save file not found when attempting to hash");
+                callback(null, null);
+            }
+        }
+
+        var recentHash = null;
+        if (this.gameManager) { withGameSaveHash(this.gameManager.getSaveFile(false), (hash, _) => { recentHash = hash }) }
+
+        this.on("saveSaveFiles", saveFile => {
+            withGameSaveHash(saveFile, (newHash, fileContents) => {
+                if (newHash && fileContents && newHash !== recentHash) {
+                    recentHash = newHash;
+                    this.takeScreenshot(this.capture.photo.source, this.capture.photo.format, this.capture.photo.upscale).then(({ screenshot, format }) => {
+                        this.callEvent("saveUpdate", {
+                            hash: newHash,
+                            save: fileContents,
+                            screenshot: screenshot,
+                            format: format
+                        });
+                    })
+                }
+            })
+        })
     }
 }
 window.EmulatorJS = EmulatorJS;
