@@ -4,8 +4,6 @@
         "nipplejs.js",
         "shaders.js",
         "storage.js",
-        "utils.js",
-        "cache.js",
         "gamepad.js",
         "GameManager.js",
         "socket.io.min.js",
@@ -100,13 +98,12 @@
     config.fullscreenOnLoad = window.EJS_fullscreenOnLoaded;
     config.filePaths = window.EJS_paths;
     config.loadState = window.EJS_loadStateURL;
-    config.cacheConfig = window.EJS_cacheConfig;
+    config.cacheLimit = window.EJS_CacheLimit;
     config.cheats = window.EJS_cheats;
     config.defaultOptions = window.EJS_defaultOptions;
     config.gamePatchUrl = window.EJS_gamePatchUrl;
     config.gameParentUrl = window.EJS_gameParentUrl;
     config.netplayUrl = window.EJS_netplayServer;
-    config.netplayICEServers = window.EJS_netplayICEServers; 
     config.gameId = window.EJS_gameID;
     config.backgroundImg = window.EJS_backgroundImage;
     config.backgroundBlur = window.EJS_backgroundBlur;
@@ -118,69 +115,33 @@
     config.softLoad = window.EJS_softLoad;
     config.capture = window.EJS_screenCapture;
     config.externalFiles = window.EJS_externalFiles;
-    config.dontExtractRom = window.EJS_dontExtractRom;
     config.dontExtractBIOS = window.EJS_dontExtractBIOS;
+    config.disableDatabases = window.EJS_disableDatabases;
     config.disableLocalStorage = window.EJS_disableLocalStorage;
     config.forceLegacyCores = window.EJS_forceLegacyCores;
     config.noAutoFocus = window.EJS_noAutoFocus;
     config.videoRotation = window.EJS_videoRotation;
     config.hideSettings = window.EJS_hideSettings;
-    config.browserMode = window.EJS_browserMode;
     config.shaders = Object.assign({}, window.EJS_SHADERS, window.EJS_shaders ? window.EJS_shaders : {});
-    config.fixedSaveInterval = window.EJS_fixedSaveInterval;
-    config.disableAutoUnload = window.EJS_disableAutoUnload;
-    config.disableBatchBootup = window.EJS_disableBatchBootup;
 
     let systemLang;
     try {
         systemLang = Intl.DateTimeFormat().resolvedOptions().locale;
     } catch(e) {} //Ignore
-    const defaultLangs = ["en", "en-US"];
-    const isDefaultLang = (lang) => defaultLangs.includes(lang);
-    if ((typeof window.EJS_language === "string" && !isDefaultLang(window.EJS_language)) || (systemLang && window.EJS_disableAutoLang !== false)) {
+    if ((typeof window.EJS_language === "string" && window.EJS_language !== "en-US") || (systemLang && window.EJS_disableAutoLang !== false)) {
         const language = window.EJS_language || systemLang;
-        const autoLang = !window.EJS_language && typeof systemLang === "string";
         try {
-            let languagePath;
-            let fallbackPath = false;
+            let path;
             console.log("Loading language", language);
             if ("undefined" != typeof EJS_paths && typeof EJS_paths[language] === "string") {
-                languagePath = EJS_paths[language];
+                path = EJS_paths[language];
             } else {
-                languagePath = scriptPath + "localization/" + language + ".json";
-                if (language.includes("-") || language.includes("_")) {
-                    fallbackPath = scriptPath + "localization/" + language.split(/[-_]/)[0] + ".json";
-                }
+                path = scriptPath + "localization/" + language + ".json";
             }
             config.language = language;
-            let langJson = {};
-            let missingLang = false;
-            if (!isDefaultLang(language)) {
-                if (autoLang) {
-                    try {
-                        let languageJson = await fetch(languagePath);
-                        if (!languageJson.ok) throw new Error(`Missing language file: ${languageJson.status}`);
-                        langJson = JSON.parse(await languageJson.text());
-                        if (fallbackPath) {
-                            let fallbackJson = await fetch(fallbackPath);
-                            missingLang = !fallbackJson.ok;
-                            if (!fallbackJson.ok) throw new Error(`Missing language file: ${fallbackJson.status}`);
-                            langJson = { ...JSON.parse(await fallbackJson.text()), ...langJson };
-                        }
-                    } catch(e) {
-                        config.language = language.split(/[-_]/)[0];
-                        console.warn("Failed to load language:", language + ",", "trying default language:", config.language);
-                        if (!missingLang) {
-                            langJson = JSON.parse(await (await fetch(fallbackPath)).text());
-                        }
-                    }
-                } else {
-                    langJson = JSON.parse(await (await fetch(languagePath)).text());
-                }
-                config.langJson = langJson;
-            }
+            config.langJson = JSON.parse(await (await fetch(path)).text());
         } catch(e) {
-            console.log("Missing language:", language, "!!");
+            console.log("Missing language", language, "!!");
             delete config.language;
             delete config.langJson;
         }
@@ -205,9 +166,5 @@
     }
     if (typeof window.EJS_onSaveSave === "function") {
         window.EJS_emulator.on("saveSave", window.EJS_onSaveSave);
-    }
-    if (typeof window.EJS_onSaveUpdate === "function") {
-        window.EJS_emulator.on("saveUpdate", window.EJS_onSaveUpdate);
-        window.EJS_emulator.enableSaveUpdateEvent();
     }
 })();

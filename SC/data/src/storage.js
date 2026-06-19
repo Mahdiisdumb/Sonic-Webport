@@ -1,13 +1,7 @@
 class EJS_STORAGE {
-    /**
-     * @param {string} dbName
-     * @param {string} storeName
-     * @param {string[]?} indexes - Optional array of field names to create non-unique indexes on
-     */
-    constructor(dbName, storeName, indexes = null) {
+    constructor(dbName, storeName) {
         this.dbName = dbName;
         this.storeName = storeName;
-        this.indexes = indexes;
     }
     addFileToDB(key, add) {
         (async () => {
@@ -23,85 +17,73 @@ class EJS_STORAGE {
             this.put("?EJS_KEYS!", keys);
         })();
     }
-    getObjectStore(mode = "readwrite") {
+    get(key) {
         return new Promise((resolve, reject) => {
             if (!window.indexedDB) return resolve();
             let openRequest = indexedDB.open(this.dbName, 1);
             openRequest.onerror = () => resolve();
             openRequest.onsuccess = () => {
                 let db = openRequest.result;
-                let transaction = db.transaction(this.storeName, mode);
+                let transaction = db.transaction([this.storeName], "readwrite");
                 let objectStore = transaction.objectStore(this.storeName);
-                resolve(objectStore);
+                let request = objectStore.get(key);
+                request.onsuccess = (e) => {
+                    resolve(request.result);
+                };
+                request.onerror = () => resolve();
             };
             openRequest.onupgradeneeded = () => {
                 let db = openRequest.result;
-                let objectStore;
                 if (!db.objectStoreNames.contains(this.storeName)) {
-                    objectStore = db.createObjectStore(this.storeName);
-                } else {
-                    objectStore = openRequest.transaction.objectStore(this.storeName);
-                }
-                // Create indexes if provided
-                if (this.indexes && Array.isArray(this.indexes)) {
-                    for (const idx of this.indexes) {
-                        if (!objectStore.indexNames.contains(idx)) {
-                            objectStore.createIndex(idx, idx, { unique: false });
-                        }
-                    }
-                }
+                    db.createObjectStore(this.storeName);
+                };
             };
-        });
-    }
-    /**
-     * Get a value by key or by index.
-     * @param {string|any} key - The key or index value to search for
-     * @param {string|null} indexName - Optional index name to search by
-     * @returns {Promise<any>}
-     */
-    get(key, indexName = null) {
-        return new Promise(async (resolve, reject) => {
-            const objectStore = await this.getObjectStore();
-            if (!objectStore) return resolve();
-            if (!indexName) {
-                // Default: get by primary key
-                let request = objectStore.get(key);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => resolve();
-            } else {
-                // Get by index
-                try {
-                    const index = objectStore.index(indexName);
-                    let req = index.get(key);
-                    req.onsuccess = () => resolve(req.result);
-                    req.onerror = () => resolve();
-                } catch (e) {
-                    // Index not found
-                    resolve();
-                }
-            }
         });
     }
     put(key, data) {
-        return new Promise(async (resolve, reject) => {
-            const objectStore = await this.getObjectStore();
-            if (!objectStore) return resolve();
-            let request = objectStore.put(data, key);
-            request.onerror = () => resolve();
-            request.onsuccess = () => {
-                this.addFileToDB(key, true);
-                resolve();
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) return resolve();
+            let openRequest = indexedDB.open(this.dbName, 1);
+            openRequest.onerror = () => {};
+            openRequest.onsuccess = () => {
+                let db = openRequest.result;
+                let transaction = db.transaction([this.storeName], "readwrite");
+                let objectStore = transaction.objectStore(this.storeName);
+                let request = objectStore.put(data, key);
+                request.onerror = () => resolve();
+                request.onsuccess = () => {
+                    this.addFileToDB(key, true);
+                    resolve();
+                }
             };
-        });
+            openRequest.onupgradeneeded = () => {
+                let db = openRequest.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName);
+                };
+            };
+        })
     }
     remove(key) {
-        return new Promise(async (resolve, reject) => {
-            const objectStore = await this.getObjectStore();
-            if (!objectStore) return resolve();
-            let request = objectStore.delete(key);
-            this.addFileToDB(key, false);
-            request.onsuccess = () => resolve();
-            request.onerror = () => {};
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) return resolve();
+            let openRequest = indexedDB.open(this.dbName, 1);
+            openRequest.onerror = () => {};
+            openRequest.onsuccess = () => {
+                let db = openRequest.result;
+                let transaction = db.transaction([this.storeName], "readwrite");
+                let objectStore = transaction.objectStore(this.storeName);
+                let request2 = objectStore.delete(key);
+                this.addFileToDB(key, false);
+                request2.onsuccess = () => resolve();
+                request2.onerror = () => {};
+            };
+            openRequest.onupgradeneeded = () => {
+                let db = openRequest.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName);
+                };
+            };
         });
     }
     getSizes() {
@@ -117,28 +99,6 @@ class EJS_STORAGE {
             }
             resolve(rv);
         })
-    }
-    getAll() {
-        return new Promise(async (resolve, reject) => {
-            if (!window.indexedDB) return resolve([]);
-            const keys = await this.get("?EJS_KEYS!");
-            if (!keys) return resolve([]);
-            let rv = [];
-            for (let i = 0; i < keys.length; i++) {
-                const result = await this.get(keys[i]);
-                if (!result) continue;
-                rv.push(result);
-            }
-            resolve(rv);
-        });
-    }
-    getKeys() {
-        return new Promise(async (resolve, reject) => {
-            if (!window.indexedDB) return resolve([]);
-            const keys = await this.get("?EJS_KEYS!");
-            if (!keys) return resolve([]);
-            resolve(keys);
-        });
     }
 }
 

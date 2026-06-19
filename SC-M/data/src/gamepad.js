@@ -1,4 +1,7 @@
 class GamepadHandler {
+    gamepads;
+    timeout;
+    listeners;
     constructor() {
         this.buttonLabels = {
             0: 'BUTTON_1',
