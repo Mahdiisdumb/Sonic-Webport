@@ -4,37 +4,34 @@ class EJS_GameManager {
         this.Module = Module;
         this.FS = this.Module.FS;
         this.functions = {
-            restart: this.Module.cwrap("system_restart", "", []),
-            //saveStateInfo: this.Module.cwrap("save_state_info", "string", []),
-            loadState: this.Module.cwrap("load_state", "number", ["string", "number"]),
-            screenshot: this.Module.cwrap("cmd_take_screenshot", "", []),
-            simulateInput: this.Module.cwrap("simulate_input", "null", ["number", "number", "number"]),
-            toggleMainLoop: this.Module.cwrap("toggleMainLoop", "null", ["number"]),
-            getCoreOptions: this.Module.cwrap("get_core_options", "string", []),
-            setVariable: this.Module.cwrap("ejs_set_variable", "null", ["string", "string"]),
-            setCheat: this.Module.cwrap("set_cheat", "null", ["number", "number", "string"]),
-            resetCheat: this.Module.cwrap("reset_cheat", "null", []),
-            toggleShader: this.Module.cwrap("shader_enable", "null", ["number"]),
-            getDiskCount: this.Module.cwrap("get_disk_count", "number", []),
-            getCurrentDisk: this.Module.cwrap("get_current_disk", "number", []),
-            setCurrentDisk: this.Module.cwrap("set_current_disk", "null", ["number"]),
-            getSaveFilePath: this.Module.cwrap("save_file_path", "string", []),
-            saveSaveFiles: this.Module.cwrap("cmd_savefiles", "", []),
-            supportsStates: this.Module.cwrap("supports_states", "number", []),
-            loadSaveFiles: this.Module.cwrap("refresh_save_files", "null", []),
-            toggleFastForward: this.Module.cwrap("toggle_fastforward", "null", ["number"]),
-            setFastForwardRatio: this.Module.cwrap("set_ff_ratio", "null", ["number"]),
-            toggleRewind: this.Module.cwrap("toggle_rewind", "null", ["number"]),
-            setRewindGranularity: this.Module.cwrap("set_rewind_granularity", "null", ["number"]),
-            toggleSlowMotion: this.Module.cwrap("toggle_slow_motion", "null", ["number"]),
-            setSlowMotionRatio: this.Module.cwrap("set_sm_ratio", "null", ["number"]),
-            getFrameNum: this.Module.cwrap("get_current_frame_count", "number", [""]),
-            setVSync: this.Module.cwrap("set_vsync", "null", ["number"]),
-            setVideoRoation: this.Module.cwrap("set_video_rotation", "null", ["number"]),
-            getVideoDimensions: this.Module.cwrap("get_video_dimensions", "number", ["string"]),
-            setKeyboardEnabled: this.Module.cwrap("ejs_set_keyboard_enabled", "null", ["number"]),
-            setControllerPortDevice: this.Module.cwrap("ejs_set_controller_port_device", "null", ["number", "number"]),
-            getControllerPortInfo: this.Module.cwrap("ejs_get_controller_port_info", "string", [])
+            restart: this.Module.cwrap('system_restart', '', []),
+            saveStateInfo: this.Module.cwrap('save_state_info', 'string', []),
+            loadState: this.Module.cwrap('load_state', 'number', ['string', 'number']),
+            screenshot: this.Module.cwrap('cmd_take_screenshot', '', []),
+            simulateInput: this.Module.cwrap('simulate_input', 'null', ['number', 'number', 'number']),
+            toggleMainLoop: this.Module.cwrap('toggleMainLoop', 'null', ['number']),
+            getCoreOptions: this.Module.cwrap('get_core_options', 'string', []),
+            setVariable: this.Module.cwrap('ejs_set_variable', 'null', ['string', 'string']),
+            setCheat: this.Module.cwrap('set_cheat', 'null', ['number', 'number', 'string']),
+            resetCheat: this.Module.cwrap('reset_cheat', 'null', []),
+            toggleShader: this.Module.cwrap('shader_enable', 'null', ['number']),
+            getDiskCount: this.Module.cwrap('get_disk_count', 'number', []),
+            getCurrentDisk: this.Module.cwrap('get_current_disk', 'number', []),
+            setCurrentDisk: this.Module.cwrap('set_current_disk', 'null', ['number']),
+            getSaveFilePath: this.Module.cwrap('save_file_path', 'string', []),
+            saveSaveFiles: this.Module.cwrap('cmd_savefiles', '', []),
+            supportsStates: this.Module.cwrap('supports_states', 'number', []),
+            loadSaveFiles: this.Module.cwrap('refresh_save_files', 'null', []),
+            toggleFastForward: this.Module.cwrap('toggle_fastforward', 'null', ['number']),
+            setFastForwardRatio: this.Module.cwrap('set_ff_ratio', 'null', ['number']),
+            toggleRewind: this.Module.cwrap('toggle_rewind', 'null', ['number']),
+            setRewindGranularity: this.Module.cwrap('set_rewind_granularity', 'null', ['number']),
+            toggleSlowMotion: this.Module.cwrap('toggle_slow_motion', 'null', ['number']),
+            setSlowMotionRatio: this.Module.cwrap('set_sm_ratio', 'null', ['number']),
+            getFrameNum: this.Module.cwrap('get_current_frame_count', 'number', ['']),
+            setVSync: this.Module.cwrap('set_vsync', 'null', ['number']),
+            setVideoRoation: this.Module.cwrap('set_video_rotation', 'null', ['number']),
+            setKeyboardEnabled: this.Module.cwrap('ejs_set_keyboard_enabled', 'null', ['number'])
         }
 
         this.writeFile("/home/web_user/.config/retroarch/retroarch.cfg", this.getRetroArchCfg());
@@ -50,7 +47,7 @@ class EJS_GameManager {
                 this.saveSaveFiles();
             }
             this.toggleMainLoop(0);
-            this.FS.unmount("/data/saves");
+            this.FS.unmount('/data/saves');
             setTimeout(() => {
                 try {
                     this.Module.abort();
@@ -70,7 +67,7 @@ class EJS_GameManager {
         return new Promise(async resolve => {
             this.mkdir("/data");
             this.mkdir("/data/saves");
-            this.FS.mount(this.FS.filesystems.IDBFS, { autoPersist: true }, "/data/saves");
+            this.FS.mount(this.FS.filesystems.IDBFS, { autoPersist: true }, '/data/saves');
             this.FS.syncfs(true, resolve);
         });
     }
@@ -87,41 +84,36 @@ class EJS_GameManager {
     }
     loadExternalFiles() {
         return new Promise(async (resolve, reject) => {
-            if (this.EJS.config.externalFiles && this.EJS.config.externalFiles.constructor.name === "Object") {
+            if (this.EJS.config.externalFiles && this.EJS.config.externalFiles.constructor.name === 'Object') {
                 for (const key in this.EJS.config.externalFiles) {
-                    await new Promise(async (done) => {
-                        try {
-                            const url = this.EJS.config.externalFiles[key];
-                            
-                            const cacheItem = await this.EJS.downloadFile(
-                                url,
-                                this.EJS.downloadType.support.name,
-                                null,          // progress callback
-                                true,          // notWithPath (URL is already absolute)
-                                { responseType: "arraybuffer" },  // opts (was null → causes crash)
-                                false,         // forceExtract
-                                this.EJS.downloadType.support.dontCache,
-                                false          // dontExtract
-                            );
-                            
+                    await new Promise(done => {
+                        this.EJS.downloadFile(this.EJS.config.externalFiles[key], null, true, { responseType: "arraybuffer", method: "GET" }).then(async (res) => {
+                            if (res === -1) {
+                                if (this.EJS.debug) console.warn("Failed to fetch file from '" + this.EJS.config.externalFiles[key] + "'. Make sure the file exists.");
+                                return done();
+                            }
                             let path = key;
                             if (key.trim().endsWith("/")) {
-                                // Extract to directory
-                                for (let i = 0; i < cacheItem.data.files.length; i++) {
-                                    const file = cacheItem.data.files[i];
-                                    this.writeFile(path + file.filename, file.bytes);
-                                }
-                            } else {
-                                // Write single file (or first file from archive)
-                                if (cacheItem.data.files.length > 0) {
-                                    this.writeFile(path, cacheItem.data.files[0].bytes);
+                                const invalidCharacters = /[#<$+%>!`&*'|{}/\\?"=@:^\r\n]/ig;
+                                let name = this.EJS.config.externalFiles[key].split("/").pop().split("#")[0].split("?")[0].replace(invalidCharacters, "").trim();
+                                if (!name) return done();
+                                const files = await this.EJS.checkCompression(new Uint8Array(res.data), this.EJS.localization("Decompress Game Assets"));
+                                if (files["!!notCompressedData"]) {
+                                    path += name;
+                                } else {
+                                    for (const k in files) {
+                                        this.writeFile(path + k, files[k]);
+                                    }
+                                    return done();
                                 }
                             }
+                            try {
+                                this.writeFile(path, res.data);
+                            } catch(e) {
+                                if (this.EJS.debug) console.warn("Failed to write file to '" + path + "'. Make sure there are no conflicting files.");
+                            }
                             done();
-                        } catch (e) {
-                            if (this.EJS.debug) console.warn("Failed to fetch file from '" + this.EJS.config.externalFiles[key] + "'. Make sure the file exists.", e);
-                            done();
-                        }
+                        });
                     })
                 }
             }
@@ -171,27 +163,12 @@ class EJS_GameManager {
         }
         return cfg;
     }
-    writeBootupBatchFile() {
-        const data = `
-SET BLASTER=A220 I7 D1 H5 T6
-
-@ECHO OFF
-mount A / -t floppy
-SET PATH=Z:\;A:\
-mount c /emulator/c
-c:
-IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
-`;
-        const filename = "BOOTUP.BAT";
-        this.FS.writeFile("/" + filename, data);
-        return filename;
-    }
     initShaders() {
-        if (!this.EJS.shaders) return;
+        if (!this.EJS.config.shaders) return;
         this.mkdir("/shader");
-        for (const shaderFileName in this.EJS.shaders) {
-            const shader = this.EJS.shaders[shaderFileName];
-            if (typeof shader === "string") {
+        for (const shaderFileName in this.EJS.config.shaders) {
+            const shader = this.EJS.config.shaders[shaderFileName];
+            if (typeof shader === 'string') {
                 this.FS.writeFile(`/shader/${shaderFileName}`, shader);
             }
         }
@@ -207,24 +184,32 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
         this.functions.restart();
     }
     getState() {
-        return this.Module.EmulatorJSGetState();
+        const state = this.functions.saveStateInfo().split("|");
+        if (state[2] !== "1") {
+            console.error(state[0]);
+            throw new Error(state[0]);
+        }
+        const size = parseInt(state[0]);
+        const dataStart = parseInt(state[1]);
+        const data = this.Module.HEAPU8.subarray(dataStart, dataStart + size);
+        return new Uint8Array(data);
     }
     loadState(state) {
         try {
-            this.FS.unlink("game.state");
+            this.FS.unlink('game.state');
         } catch(e) {}
-        this.FS.writeFile("/game.state", state);
+        this.FS.writeFile('/game.state', state);
         this.clearEJSResetTimer();
         this.functions.loadState("game.state", 0);
         setTimeout(() => {
             try {
-                this.FS.unlink("game.state");
+                this.FS.unlink('game.state');
             } catch(e) {}
         }, 5000)
     }
     screenshot() {
         try {
-            this.FS.unlink("/screenshot.png");
+            this.FS.unlink('screenshot.png');
         } catch(e) {}
         this.functions.screenshot();
         return new Promise(async resolve => {
@@ -239,13 +224,13 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
     }
     quickSave(slot) {
         if (!slot) slot = 1;
-        let name = slot + "-quick.state";
+        let name = slot + '-quick.state';
         try {
             this.FS.unlink(name);
         } catch(e) {}
         try {
             let data = this.getState();
-            this.FS.writeFile("/" + name, data);
+            this.FS.writeFile('/' + name, data);
         } catch(e) {
             return false;
         }
@@ -254,7 +239,7 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
     quickLoad(slot) {
         if (!slot) slot = 1;
         (async () => {
-            let name = slot + "-quick.state";
+            let name = slot + '-quick.state';
             this.clearEJSResetTimer();
             this.functions.loadState(name, 0);
         })();
@@ -266,7 +251,7 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
         }
         if ([24, 25, 26, 27, 28, 29].includes(index)) {
             if (index === 24 && value === 1) {
-                const slot = this.EJS.settings["save-state-slot"] ? this.EJS.settings["save-state-slot"] : "1";
+                const slot = this.EJS.settings['save-state-slot'] ? this.EJS.settings['save-state-slot'] : "1";
                 if (this.quickSave(slot)) {
                     this.EJS.displayMessage(this.EJS.localization("SAVED STATE TO SLOT") + " " + slot);
                 } else {
@@ -274,20 +259,20 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
                 }
             }
             if (index === 25 && value === 1) {
-                const slot = this.EJS.settings["save-state-slot"] ? this.EJS.settings["save-state-slot"] : "1";
+                const slot = this.EJS.settings['save-state-slot'] ? this.EJS.settings['save-state-slot'] : "1";
                 this.quickLoad(slot);
                 this.EJS.displayMessage(this.EJS.localization("LOADED STATE FROM SLOT") + " " + slot);
             }
             if (index === 26 && value === 1) {
                 let newSlot;
                 try {
-                    newSlot = parseFloat(this.EJS.settings["save-state-slot"] ? this.EJS.settings["save-state-slot"] : "1") + 1;
+                    newSlot = parseFloat(this.EJS.settings['save-state-slot'] ? this.EJS.settings['save-state-slot'] : "1") + 1;
                 } catch(e) {
                     newSlot = 1;
                 }
                 if (newSlot > 9) newSlot = 1;
                 this.EJS.displayMessage(this.EJS.localization("SET SAVE STATE SLOT TO") + " " + newSlot);
-                this.EJS.changeSettingOption("save-state-slot", newSlot.toString());
+                this.EJS.changeSettingOption('save-state-slot', newSlot.toString());
             }
             if (index === 27) {
                 this.functions.toggleFastForward(this.EJS.isFastForward ? !value : value);
@@ -356,36 +341,35 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
         return (fileNames.length === 1) ? baseFileName + "-0.cue" : baseFileName + ".m3u";
     }
     loadPpssppAssets() {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const cacheItem = await this.EJS.downloader.downloadFile("data/cores/ppsspp-assets.zip", this.EJS.downloadType.core.name, "GET", {}, null, null, null, 30000, "arraybuffer", false, this.EJS.downloadType.core.dontCache);
+        return new Promise(resolve => {
+            this.EJS.downloadFile('cores/ppsspp-assets.zip', null, false, { responseType: "arraybuffer", method: "GET" }).then((res) => {
+                this.EJS.checkCompression(new Uint8Array(res.data), this.EJS.localization("Decompress Game Data")).then((pspassets) => {
+                    if (pspassets === -1) {
+                        this.EJS.textElem.innerText = this.localization('Network Error');
+                        this.EJS.textElem.style.color = "red";
+                        return;
+                    }
+                    this.mkdir("/PPSSPP");
 
-                console.log(cacheItem);
-                
-                this.mkdir("/PPSSPP");
-
-                for (let i = 0; i < cacheItem.files.length; i++) {
-                    const file = cacheItem.files[i];
-                    const path = "/PPSSPP/" + file.filename;
-                    const paths = path.split("/");
-                    let cp = "";
-                    for (let j = 0; j < paths.length - 1; j++) {
-                        if (paths[j] === "") continue;
-                        cp += "/" + paths[j];
-                        if (!this.FS.analyzePath(cp).exists) {
-                            this.FS.mkdir(cp);
+                    for (const file in pspassets) {
+                        const data = pspassets[file];
+                        const path = "/PPSSPP/" + file;
+                        const paths = path.split("/");
+                        let cp = "";
+                        for (let i = 0; i < paths.length - 1; i++) {
+                            if (paths[i] === "") continue;
+                            cp += "/" + paths[i];
+                            if (!this.FS.analyzePath(cp).exists) {
+                                this.FS.mkdir(cp);
+                            }
+                        }
+                        if (!path.endsWith("/")) {
+                            this.FS.writeFile(path, data);
                         }
                     }
-                    if (!path.endsWith("/")) {
-                        this.FS.writeFile(path, file.bytes);
-                    }
-                }
-                resolve();
-            } catch (error) {
-                this.EJS.textElem.innerText = this.EJS.localization("Network Error");
-                this.EJS.textElem.style.color = "red";
-                reject(error);
-            }
+                    resolve();
+                })
+            });
         })
     }
     setVSync(enabled) {
@@ -429,12 +413,6 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
     supportsStates() {
         return !!this.functions.supportsStates();
     }
-    setControllerPortDevice(port, device) {
-        this.functions.setControllerPortDevice(port, device);
-    }
-    getControllerPortInfo() {
-        return this.functions.getControllerPortInfo();
-    }
     getSaveFile(save) {
         if (save !== false) {
             this.saveSaveFiles();
@@ -465,11 +443,8 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
         return this.functions.getFrameNum();
     }
     setVideoRotation(rotation) {
-        this.functions.setVideoRoation(rotation);
-    }
-    getVideoDimensions(type) {
         try {
-            return this.functions.getVideoDimensions(type);
+            this.functions.setVideoRoation(rotation);
         } catch(e) {
             console.warn(e);
         }
@@ -480,30 +455,6 @@ IF EXIST AUTORUN.BAT CALL AUTORUN.BAT
     setAltKeyEnabled(enabled) {
         this.functions.setKeyboardEnabled(enabled === true ? 3 : 2);
     }
-    listDir(path, indent = "") {
-        const skipPaths = ["/dev", "/proc", "/sys"];
-        if (skipPaths.includes(path)) {
-            console.warn(`Skipping directory listing for ${path}`);
-            return;
-        }
-        try {
-            const entries = this.FS.readdir(path);
-            for (const entry of entries) {
-                if (entry === "." || entry === "..") continue;
-                const fullPath = path === "/" ? `/${entry}` : `${path}/${entry}`;
-                if (skipPaths.some(skip => fullPath.startsWith(skip))) continue;
-                const stat = this.FS.stat(fullPath);
-                if (this.FS.isDir(stat.mode)) {
-                    console.log(`${indent}[DIR] ${fullPath}`);
-                    this.listDir(fullPath, indent + "  ");
-                } else {
-                    console.log(`${indent}${fullPath}`);
-                }
-            }
-        } catch (e) {
-            console.warn("Error reading directory:", path, e);
-        }
-    }
 }
 
-export { EJS_GameManager };
+window.EJS_GameManager = EJS_GameManager;
