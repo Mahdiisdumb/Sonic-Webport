@@ -1,3 +1,7 @@
+EJS_defaultOptions = {
+    useKeyboard: true
+};
+
 EJS_player = "#game";
 EJS_core = "picodrive";
 EJS_gameUrl = "./SCD.zip";
