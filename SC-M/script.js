@@ -1,7 +1,9 @@
 EJS_defaultOptions = {
     useKeyboard: true
 };
-EJS_controlScheme = "segaMD";
+
+EJS_controlScheme = "segaCD";
+
 EJS_player = "#game";
 EJS_core = "picodrive";
 EJS_gameUrl = "./SCD.zip";
