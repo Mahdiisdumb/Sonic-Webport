@@ -91,6 +91,7 @@ enum GameRegions {
 #define RETRO_iOS     (6)
 #define RETRO_ANDROID (7)
 #define RETRO_UWP     (8)
+#define RETRO_WEBASM  (9)
 
 // ============================
 // PLATFORMS (used mostly in legacy but could come in handy here)
@@ -100,7 +101,13 @@ enum GameRegions {
 
 #define sprintf_s(x, _, ...) snprintf(x, _, __VA_ARGS__)
 
-#if defined _WIN32
+#if defined __EMSCRIPTEN__
+
+#define RETRO_PLATFORM   (RETRO_WEBASM)
+#define RETRO_DEVICETYPE (RETRO_STANDARD)
+
+#elif defined _WIN32
+
 #undef sprintf_s
 
 #if defined WINAPI_FAMILY
@@ -117,6 +124,7 @@ enum GameRegions {
 #endif
 
 #elif defined __APPLE__
+
 #define RETRO_USING_MOUSE
 #define RETRO_USING_TOUCH
 #include <TargetConditionals.h>
@@ -133,18 +141,26 @@ enum GameRegions {
 #else
 #error "Unknown Apple platform"
 #endif
+
 #elif defined __ANDROID__
+
 #define RETRO_PLATFORM   (RETRO_ANDROID)
 #define RETRO_DEVICETYPE (RETRO_MOBILE)
+
 #elif defined __SWITCH__
+
 #define RETRO_PLATFORM   (RETRO_SWITCH)
 #define RETRO_DEVICETYPE (RETRO_STANDARD)
+
 #elif defined __linux__
+
 #define RETRO_PLATFORM   (RETRO_LINUX)
 #define RETRO_DEVICETYPE (RETRO_STANDARD)
+
 #else
-#define RETRO_PLATFORM   (RETRO_WIN)
-#define RETRO_DEVICETYPE (RETRO_STANDARD)
+
+#error "Unknown platform"
+
 #endif
 
 #ifndef SCREEN_XMAX
@@ -202,7 +218,7 @@ enum GameRegions {
 // ============================
 #define RETRO_USERCORE_ID (0)
 
-#define RETRO_USERCORE_DUMMY (!(RETRO_USERCORE_ID & 0x80)) // bit 7 disables the dummy core stuff if you ever need that for some odd reason
+#define RETRO_USERCORE_DUMMY (!(RETRO_USERCORE_ID & 0x80))
 #define RETRO_USERCORE_STEAM (RETRO_USERCORE_ID == 1)
 #define RETRO_USERCORE_PS4   (RETRO_USERCORE_ID == 2)
 #define RETRO_USERCORE_XB1   (RETRO_USERCORE_ID == 3)
@@ -213,42 +229,30 @@ enum GameRegions {
 // ENGINE CONFIG
 // ============================
 
-// Determines if the engine is RSDKv5 rev01 (all versions of mania pre-plus), rev02 (all versions of mania post-plus) or RSDKv5U (sonic origins)
 #ifndef RETRO_REVISION
 #define RETRO_REVISION (3)
 #endif
 
-// RSDKv5 Rev02 (Used prior to Sonic Mania Plus)
 #define RETRO_REV01 (RETRO_REVISION >= 1)
-
-// RSDKv5 Rev02 (Used in Sonic Mania Plus)
 #define RETRO_REV02 (RETRO_REVISION >= 2)
-
-// RSDKv5U (Used in Sonic Origins)
 #define RETRO_REV0U (RETRO_REVISION >= 3)
 
-// Determines if the engine should use EGS features like achievements or not (must be rev02)
 #define RETRO_VER_EGS (RETRO_REV02 && 0)
 
-// Enables only EGS's ingame achievements popup without enabling anything else
 #define RETRO_USE_DUMMY_ACHIEVEMENTS (RETRO_REV02 && 1)
 
-// Forces all DLC flags to be disabled, this should be enabled in any public releases
 #ifndef RSDK_AUTOBUILD
 #define RSDK_AUTOBUILD (0)
 #endif
 
-// Enables the use of the mod loader
 #ifndef RETRO_USE_MOD_LOADER
 #define RETRO_USE_MOD_LOADER (!RETRO_USE_ORIGINAL_CODE && 1)
 #endif
 
-// Defines the version of the mod loader, this should be changed ONLY if the ModFunctionTable is updated in any way
 #ifndef RETRO_MOD_LOADER_VER
 #define RETRO_MOD_LOADER_VER (2)
 #endif
 
-// Disables the log, not recommended unless it impacts performance
 #ifndef RETRO_DISABLE_LOG
 #define RETRO_DISABLE_LOG (0)
 #endif
@@ -260,6 +264,7 @@ enum GameRegions {
 #if RETRO_PLATFORM == RETRO_WIN
 
 #ifdef RSDK_USE_SDL2
+
 #undef RETRO_RENDERDEVICE_SDL2
 #define RETRO_RENDERDEVICE_SDL2 (1)
 
@@ -267,6 +272,7 @@ enum GameRegions {
 #define RETRO_INPUTDEVICE_SDL2 (1)
 
 #elif defined(RSDK_USE_DX9)
+
 #undef RETRO_RENDERDEVICE_DIRECTX9
 #define RETRO_RENDERDEVICE_DIRECTX9 (1)
 
@@ -277,6 +283,7 @@ enum GameRegions {
 #define RETRO_INPUTDEVICE_RAWINPUT (1)
 
 #elif defined(RSDK_USE_DX11)
+
 #undef RETRO_RENDERDEVICE_DIRECTX11
 #define RETRO_RENDERDEVICE_DIRECTX11 (1)
 
@@ -287,6 +294,7 @@ enum GameRegions {
 #define RETRO_INPUTDEVICE_RAWINPUT (1)
 
 #elif defined(RSDK_USE_OGL)
+
 #undef RETRO_RENDERDEVICE_GLFW
 #define RETRO_RENDERDEVICE_GLFW (1)
 
@@ -294,6 +302,7 @@ enum GameRegions {
 #define RETRO_INPUTDEVICE_GLFW (1)
 
 #elif defined(RSDK_USE_VK)
+
 #undef RETRO_RENDERDEVICE_VK
 #define RETRO_RENDERDEVICE_VK (1)
 
@@ -303,17 +312,25 @@ enum GameRegions {
 #endif
 
 #else
+
 #error One of RSDK_USE_DX9, RSDK_USE_DX11, RSDK_USE_SDL2, or RSDK_USE_OGL must be defined.
+
 #endif
 
 #if !RETRO_AUDIODEVICE_MINI
+
 #if !RSDK_USE_SDL2
+
 #undef RETRO_AUDIODEVICE_XAUDIO
 #define RETRO_AUDIODEVICE_XAUDIO (1)
+
 #else
+
 #undef RETRO_AUDIODEVICE_SDL2
 #define RETRO_AUDIODEVICE_SDL2 (1)
+
 #endif
+
 #endif
 
 #elif RETRO_PLATFORM == RETRO_XB1
@@ -335,23 +352,29 @@ enum GameRegions {
 #endif
 
 #ifdef RSDK_USE_SDL2
+
 #undef RETRO_RENDERDEVICE_SDL2
 #define RETRO_RENDERDEVICE_SDL2 (1)
+
 #undef RETRO_INPUTDEVICE_SDL2
 #define RETRO_INPUTDEVICE_SDL2 (1)
 
 #undef RETRO_AUDIODEVICE_MINI
 #define RETRO_AUDIODEVICE_MINI (0)
+
 #undef RETRO_AUDIODEVICE_SDL2
 #define RETRO_AUDIODEVICE_SDL2 (1)
 
 #elif defined(RSDK_USE_OGL)
+
 #undef RETRO_RENDERDEVICE_GLFW
 #define RETRO_RENDERDEVICE_GLFW (1)
+
 #undef RETRO_INPUTDEVICE_GLFW
 #define RETRO_INPUTDEVICE_GLFW (1)
 
 #elif defined(RSDK_USE_VK)
+
 #undef RETRO_RENDERDEVICE_VK
 #define RETRO_RENDERDEVICE_VK (1)
 
@@ -361,52 +384,77 @@ enum GameRegions {
 #endif
 
 #else
+
 #error RSDK_USE_SDL2, RSDK_USE_OGL or RSDK_USE_VK must be defined.
-#endif //! RSDK_USE_SDL2
+
+#endif
 
 #elif RETRO_PLATFORM == RETRO_SWITCH
-// #undef RETRO_USERCORE_ID
-// #define RETRO_USERCORE_ID (4)
-// #define RETRO_USERCORE_ID (4 | 0x80)
 
 #ifdef RSDK_USE_SDL2
+
 #undef RETRO_RENDERDEVICE_SDL2
 #define RETRO_RENDERDEVICE_SDL2 (1)
+
 #undef RETRO_AUDIODEVICE_SDL2
 #define RETRO_AUDIODEVICE_SDL2 (1)
+
 #undef RETRO_INPUTDEVICE_SDL2
 #define RETRO_INPUTDEVICE_SDL2 (1)
 
 #elif defined(RSDK_USE_OGL)
+
 #undef RETRO_RENDERDEVICE_EGL
 #define RETRO_RENDERDEVICE_EGL (1)
+
 #undef RETRO_INPUTDEVICE_NX
 #define RETRO_INPUTDEVICE_NX (1)
+
 #undef RETRO_AUDIODEVICE_SDL2
 #define RETRO_AUDIODEVICE_SDL2 (1)
 
 #else
+
 #error RSDK_USE_SDL2 or RSDK_USE_OGL must be defined.
-#endif //! RSDK_USE_SDL2
+
+#endif
 
 #undef RETRO_INPUTDEVICE_KEYBOARD
 #define RETRO_INPUTDEVICE_KEYBOARD (0)
+
 #undef RETRO_USING_MOUSE
 
 #elif RETRO_PLATFORM == RETRO_ANDROID
 
 #if defined RSDK_USE_OGL
+
 #undef RETRO_RENDERDEVICE_EGL
 #define RETRO_RENDERDEVICE_EGL (1)
+
 #undef RETRO_INPUTDEVICE_PDBOAT
 #define RETRO_INPUTDEVICE_PDBOAT (1)
+
 #undef RETRO_AUDIODEVICE_OBOE
 #define RETRO_AUDIODEVICE_OBOE (1)
+
 #else
+
 #error RSDK_USE_OGL must be defined.
+
 #endif
 
 #elif RETRO_PLATFORM == RETRO_OSX || RETRO_PLATFORM == RETRO_iOS
+
+#undef RETRO_RENDERDEVICE_SDL2
+#define RETRO_RENDERDEVICE_SDL2 (1)
+
+#undef RETRO_AUDIODEVICE_SDL2
+#define RETRO_AUDIODEVICE_SDL2 (1)
+
+#undef RETRO_INPUTDEVICE_SDL2
+#define RETRO_INPUTDEVICE_SDL2 (1)
+
+#elif RETRO_PLATFORM == RETRO_WEBASM
 
 #undef RETRO_RENDERDEVICE_SDL2
 #define RETRO_RENDERDEVICE_SDL2 (1)
@@ -421,7 +469,6 @@ enum GameRegions {
 
 #if RETRO_PLATFORM == RETRO_WIN || RETRO_PLATFORM == RETRO_UWP
 
-// All windows systems need windows API for LoadLibrary()
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -432,7 +479,7 @@ enum GameRegions {
 #elif RETRO_AUDIODEVICE_MINI
 #define MA_NO_DECODING
 #define MA_NO_ENCODING
-#define MA_NO_RESOURCE_MANAGER 
+#define MA_NO_RESOURCE_MANAGER
 #define MA_NO_ENGINE
 #include <miniaudio/miniaudio.h>
 #endif
@@ -442,6 +489,7 @@ enum GameRegions {
 #endif
 
 #if RETRO_RENDERDEVICE_DIRECTX9 || RETRO_RENDERDEVICE_DIRECTX11
+
 #include <timeapi.h>
 #include <commctrl.h>
 #include <dbt.h>
@@ -455,7 +503,9 @@ enum GameRegions {
 #endif
 
 #undef LoadImage
+
 #elif RETRO_RENDERDEVICE_GLFW
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -468,14 +518,16 @@ enum GameRegions {
 
 #endif
 
-#endif // ! RETRO_WIN
+#endif // Windows/UWP
 
 #if RETRO_PLATFORM == RETRO_OSX
 
 #include "cocoaHelpers.hpp"
+
 #elif RETRO_PLATFORM == RETRO_iOS
 
 #include "cocoaHelpers.hpp"
+
 #elif RETRO_PLATFORM == RETRO_LINUX || RETRO_PLATFORM == RETRO_SWITCH
 
 #if RETRO_AUDIODEVICE_PORT
@@ -483,20 +535,24 @@ enum GameRegions {
 #elif RETRO_AUDIODEVICE_MINI
 #define MA_NO_DECODING
 #define MA_NO_ENCODING
-#define MA_NO_RESOURCE_MANAGER 
+#define MA_NO_RESOURCE_MANAGER
 #define MA_NO_ENGINE
 #include <miniaudio/miniaudio.h>
 #endif
 
 #if RETRO_RENDERDEVICE_GLFW
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+
 #elif RETRO_RENDERDEVICE_EGL
+
 #include <glad/glad.h>
-#include <EGL/egl.h>    // EGL library
-#include <EGL/eglext.h> // EGL extensions
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 
 #elif RETRO_RENDERDEVICE_VK
+
 #if RETRO_PLATFORM == RETRO_LINUX
 
 #ifdef VULKAN_USE_GLFW
@@ -508,35 +564,45 @@ enum GameRegions {
 #endif
 
 #if RETRO_PLATFORM == RETRO_SWITCH
+
 #define PrintConsole _PrintConsole
 #include <switch.h>
+
 extern "C" {
 #include <dyn.h>
 }
+
 #undef PrintConsole
+
 #endif
 
 #elif RETRO_PLATFORM == RETRO_ANDROID
 
 #if RETRO_RENDERDEVICE_EGL
-#include <EGL/egl.h> // EGL library
+
+#include <EGL/egl.h>
 #include <GLES2/gl2.h>
+
 #endif
 
 #include <androidHelpers.hpp>
 
 #undef RETRO_USING_MOUSE
+
 #endif
 
 #if RETRO_RENDERDEVICE_SDL2 || RETRO_INPUTDEVICE_SDL2 || RETRO_AUDIODEVICE_SDL2
+
 #if RETRO_PLATFORM == RETRO_OSX
-// yeah, I dunno how you're meant to do the below with macOS frameworks so leaving this as is for rn :P
+
 #include <SDL2/SDL.h>
+
 #else
-// This is the way of including SDL that is recommended by the devs themselves:
-// https://wiki.libsdl.org/FAQDevelopment#do_i_include_sdl.h_or_sdlsdl.h
+
 #include "SDL.h"
+
 #endif
+
 #endif
 
 #include <theora/theoradec.h>
@@ -568,22 +634,28 @@ extern "C" {
 #include "RSDK/User/Core/UserPresence.hpp"
 #include "RSDK/User/Core/UserStorage.hpp"
 #include "RSDK/Core/Link.hpp"
+
 #if RETRO_USE_MOD_LOADER
 #include "RSDK/Core/ModAPI.hpp"
 #endif
 
 // Default Objects
 #include "RSDK/Scene/Objects/DefaultObject.hpp"
+
 #if RETRO_REV02
 #include "RSDK/Scene/Objects/DevOutput.hpp"
 #endif
 
 #if !RETRO_REV0U
+
 #define ENGINE_VERSION (5)
 #define ENGINE_V_NAME  "v5"
+
 #else
+
 #define ENGINE_VERSION (engine.version)
 #define ENGINE_V_NAME  "v5U"
+
 #endif
 
 namespace RSDK
@@ -601,11 +673,12 @@ struct RetroEngine {
     bool32 devMenu        = false;
     bool32 consoleEnabled = false;
 
-    bool32 confirmFlip = false; // swaps A/B, used for nintendo and etc controllers
-    bool32 XYFlip      = false; // swaps X/Y, used for nintendo and etc controllers
+    bool32 confirmFlip = false;
+    bool32 XYFlip      = false;
 
     uint8 focusState = 0;
     uint8 inFocus    = 0;
+
 #if !RETRO_USE_ORIGINAL_CODE
     uint8 focusPausedChannel[CHANNEL_COUNT];
 #endif
@@ -614,16 +687,20 @@ struct RetroEngine {
     bool32 hardPause   = false;
 
 #if RETRO_REV0U
-    uint8 version = 5; // determines what RSDK version to use, default to RSDKv5 since thats the "core" version
+
+    uint8 version = 5;
 
     const char *gamePlatform;
     const char *gameRenderType;
     const char *gameHapticSetting;
 
 #if !RETRO_USE_ORIGINAL_CODE
+
     int32 gameReleaseID     = 0;
     const char *releaseType = "USE_STANDALONE";
+
 #endif
+
 #endif
 
     int32 storedShaderID      = SHADER_NONE;
@@ -670,12 +747,14 @@ void InitEngine();
 void StartGameObjects();
 
 #if RETRO_USE_MOD_LOADER
+
 void LoadGameXML(bool pal = false);
 void LoadXMLWindowText(const tinyxml2::XMLElement *gameElement);
 void LoadXMLPalettes(const tinyxml2::XMLElement *gameElement);
-void LoadXMLObjects(const tinyxml2::XMLElement* gameElement);
-void LoadXMLSoundFX(const tinyxml2::XMLElement* gameElement);
-void LoadXMLStages(const tinyxml2::XMLElement* gameElement);
+void LoadXMLObjects(const tinyxml2::XMLElement *gameElement);
+void LoadXMLSoundFX(const tinyxml2::XMLElement *gameElement);
+void LoadXMLStages(const tinyxml2::XMLElement *gameElement);
+
 #endif
 
 void LoadGameConfig();
@@ -687,31 +766,39 @@ inline void SetEngineState(uint8 state)
 {
     bool32 stepOver = (sceneInfo.state & ENGINESTATE_STEPOVER) == ENGINESTATE_STEPOVER;
     sceneInfo.state = state;
+
     if (stepOver)
         sceneInfo.state |= ENGINESTATE_STEPOVER;
 }
 
 #if RETRO_REV0U
+
 inline void SetGameFinished() { sceneInfo.state = ENGINESTATE_GAME_FINISHED; }
+
 #endif
 
 extern int32 *globalVarsPtr;
 
 #if RETRO_REV0U
+
 extern void (*globalVarsInitCB)(void *globals);
 
 inline void RegisterGlobalVariables(void **globals, int32 size, void (*initCB)(void *globals))
 {
     AllocateStorage(globals, size, DATASET_STG, true);
+
     globalVarsPtr    = (int32 *)*globals;
     globalVarsInitCB = initCB;
 }
+
 #else
+
 inline void RegisterGlobalVariables(void **globals, int32 size)
 {
     AllocateStorage(globals, size, DATASET_STG, true);
     globalVarsPtr = (int32 *)*globals;
 }
+
 #endif
 
 // Some misc API stuff that needs a home

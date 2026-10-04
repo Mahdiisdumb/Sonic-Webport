@@ -2963,231 +2963,8 @@ events:
   -
     kind: "find_package-v1"
     backtrace:
-      - "platforms/WEBASM.cmake:19 (find_package)"
-      - "CMakeLists.txt:68 (include)"
-    name: "SDL2"
-    configs:
-      -
-        filename: "SDL2Config.cmake"
-        kind: "cmake"
-      -
-        filename: "sdl2-config.cmake"
-        kind: "cmake"
-    version_request:
-      exact: false
-    settings:
-      required: "required_explicit"
-      quiet: false
-      global: false
-      policy_scope: true
-      bypass_provider: false
-      names:
-        - "SDL2"
-      path_suffixes:
-        - ""
-      paths:
-        CMAKE_FIND_USE_CMAKE_PATH: true
-        CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-        CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-        CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-        CMAKE_FIND_USE_INSTALL_PREFIX: true
-        CMAKE_FIND_USE_PACKAGE_ROOT_PATH: true
-        CMAKE_FIND_USE_CMAKE_PACKAGE_REGISTRY: true
-        CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY: true
-        CMAKE_FIND_ROOT_PATH_MODE: "ONLY"
-    candidates:
-      -
-        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/SDL2Config.cmake"
-        mode: "config"
-        reason: "no_exist"
-      -
-        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/sdl2-config.cmake"
-        mode: "config"
-        reason: "no_exist"
-      -
-        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/SDL2Config.cmake"
-        mode: "config"
-        reason: "no_exist"
-      -
-        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/sdl2-config.cmake"
-        mode: "config"
-        reason: "no_exist"
-      -
-        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/SDL2Config.cmake"
-        mode: "config"
-        reason: "no_exist"
-      -
-        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/sdl2-config.cmake"
-        mode: "config"
-        reason: "no_exist"
-    found: null
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-        - "/"
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-  -
-    kind: "find_package-v1"
-    backtrace:
-      - "platforms/WEBASM.cmake:26 (find_package)"
-      - "CMakeLists.txt:68 (include)"
+      - "platforms/WEBASM.cmake:36 (find_package)"
+      - "CMakeLists.txt:79 (include)"
     name: "Ogg"
     configs:
       -
@@ -3235,6 +3012,14 @@ events:
         path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/ogg-config.cmake"
         mode: "config"
         reason: "no_exist"
+      -
+        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/OggConfig.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/ogg-config.cmake"
+        mode: "config"
+        reason: "no_exist"
     found: null
     search_context:
       ENV{PATH}:
@@ -3272,12 +3057,13 @@ events:
       CMAKE_SYSTEM_PREFIX_PATH:
         - "/"
         - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
+        - "/"
+      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
   -
     kind: "find_package-v1"
     backtrace:
-      - "platforms/WEBASM.cmake:41 (find_package)"
-      - "CMakeLists.txt:68 (include)"
+      - "platforms/WEBASM.cmake:68 (find_package)"
+      - "CMakeLists.txt:79 (include)"
     name: "unofficial-theora"
     configs:
       -
@@ -3325,6 +3111,14 @@ events:
         path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/unofficial-theora-config.cmake"
         mode: "config"
         reason: "no_exist"
+      -
+        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/unofficial-theoraConfig.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/unofficial-theora-config.cmake"
+        mode: "config"
+        reason: "no_exist"
     found: null
     search_context:
       ENV{PATH}:
@@ -3362,12 +3156,13 @@ events:
       CMAKE_SYSTEM_PREFIX_PATH:
         - "/"
         - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
+        - "/"
+      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
   -
     kind: "find_package-v1"
     backtrace:
-      - "platforms/WEBASM.cmake:53 (find_package)"
-      - "CMakeLists.txt:68 (include)"
+      - "platforms/WEBASM.cmake:92 (find_package)"
+      - "CMakeLists.txt:79 (include)"
     name: "Theora"
     configs:
       -
@@ -3415,6 +3210,14 @@ events:
         path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/theora-config.cmake"
         mode: "config"
         reason: "no_exist"
+      -
+        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/TheoraConfig.cmake"
+        mode: "config"
+        reason: "no_exist"
+      -
+        path: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot/theora-config.cmake"
+        mode: "config"
+        reason: "no_exist"
     found: null
     search_context:
       ENV{PATH}:
@@ -3452,377 +3255,6 @@ events:
       CMAKE_SYSTEM_PREFIX_PATH:
         - "/"
         - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
         - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-...
-
----
-events:
-  -
-    kind: "find-v1"
-    backtrace:
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/Platform/Emscripten.cmake:6 (find_file)"
-      - "C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeSystemSpecificInformation.cmake:32 (include)"
-      - "CMakeLists.txt:3 (project)"
-    mode: "file"
-    variable: "_EMSCRIPTEN_PLATFORM_MODULE"
-    description: "Path to a file."
-    settings:
-      SearchFramework: "NEVER"
-      SearchAppBundle: "NEVER"
-      CMAKE_FIND_USE_CMAKE_PATH: true
-      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
-      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
-      CMAKE_FIND_USE_INSTALL_PREFIX: true
-    names:
-      - "Platform/Emscripten.cmake"
-    candidate_directories:
-      - "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/"
-    found: "C:/Program Files/emsdk-main/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
-    search_context:
-      ENV{PATH}:
-        - "C:\\Program Files\\emsdk-main"
-        - "C:\\Program Files\\emsdk-main\\upstream\\emscripten"
-        - "C:\\Ruby40-x64\\bin"
-        - "C:\\Program Files\\Meta Horizon\\Support\\oculus-runtime"
-        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
-        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
-        - "C:\\WINDOWS\\system32"
-        - "C:\\WINDOWS"
-        - "C:\\WINDOWS\\System32\\Wbem"
-        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
-        - "C:\\WINDOWS\\System32\\OpenSSH\\"
-        - "C:\\Program Files\\dotnet\\"
-        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
-        - "C:\\Program Files\\nodejs\\"
-        - "C:\\Program Files\\Git LFS"
-        - "C:\\Program Files\\G"
-        - "C:\\GnuWin32\\bin"
-        - "C:\\Program Files\\CMake\\bin"
-        - "C:\\Program Files\\Git\\cmd"
-        - "C:\\Program Files (x86)\\GtkSharp\\2.12\\bin"
-        - "C:\\Users\\Mahdi\\.cargo\\bin"
-        - "C:\\Program Files\\"
-        - "C:\\ffmpeg\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\GitHubDesktop\\bin"
-        - "C:\\Users\\Mahdi\\.dotnet\\tools"
-        - "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\"
-        - "C:\\Users\\Mahdi\\AppData\\Roaming\\npm"
-        - "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.27.470.0_x64__8wekyb3d8bbwe\\"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Unity\\bin"
-        - "C:\\Users\\Mahdi\\AppData\\Local\\Python\\bin"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
-      CMAKE_SYSTEM_PREFIX_PATH:
-        - "/"
-      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
+      CMAKE_FIND_ROOT_PATH: "C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot;C:/Program Files/emsdk-main/upstream/emscripten/cache/sysroot"
 ...
