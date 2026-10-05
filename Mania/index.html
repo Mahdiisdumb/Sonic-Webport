@@ -125,6 +125,14 @@ async function loadNormalRSDK() {
             true
         );
 
+        FS_createDataFile(
+            "/",
+            "Settings.ini",
+            new Uint8Array(),
+            true,
+            true
+        );
+
     });
 
 }
@@ -238,6 +246,14 @@ async function loadSplitRSDK() {
             "/",
             "Data.rsdk",
             combined,
+            true,
+            true
+        );
+
+        FS_createDataFile(
+            "/",
+            "Settings.ini",
+            new Uint8Array(),
             true,
             true
         );
